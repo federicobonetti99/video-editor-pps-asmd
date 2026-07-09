@@ -59,3 +59,30 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
 
     addedClip.duration shouldBe 5.0
   }
+
+  test("Cut a video clip into two distinct sub-clips at a relative time") {
+    val clipToCut = VideoClip(
+      sourceUrl = "video1.mp4",
+      startTime = 10.0,
+      trimStart = 0.0,
+      duration = 10.0,
+      sourceLength = 20.0,
+      effect = VideoEffect.None
+    )
+    val timelineWithClip = TimelineEngine.addVideoClip(initialTimeline, trackId = 1, clip = clipToCut)
+
+    val updatedTimeline = TimelineEngine.cutVideoClip(timelineWithClip, trackId = 1, clipIndex = 0, relativeCutTime = 4.0)
+    val finalClips = updatedTimeline.videoTracks.head.clips
+
+    finalClips should have size 2
+
+    val leftClip = finalClips(0)
+    leftClip.startTime shouldBe 10.0
+    leftClip.duration shouldBe 4.0
+    leftClip.trimStart shouldBe 0.0
+
+    val rightClip = finalClips(1)
+    rightClip.startTime shouldBe 14.0
+    rightClip.duration shouldBe 6.0
+    rightClip.trimStart shouldBe 4.0
+  }

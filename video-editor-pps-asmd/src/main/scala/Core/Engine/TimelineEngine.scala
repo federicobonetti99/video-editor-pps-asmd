@@ -25,3 +25,26 @@ object TimelineEngine:
         track
     }
     timeline.copy(videoTracks = updatedTracks)
+
+  def cutVideoClip(timeline: Timeline, trackId: Int, clipIndex: Int, relativeCutTime: Double): Timeline =
+    val updatedTracks = timeline.videoTracks.map { track =>
+      if track.id == trackId && track.clips.isDefinedAt(clipIndex) then
+        val originalClip = track.clips(clipIndex)
+
+        if relativeCutTime <= 0.0 || relativeCutTime >= originalClip.duration then
+          track
+        else
+          val leftClip = originalClip.copy(
+            duration = relativeCutTime
+          )
+          val rightClip = originalClip.copy(
+            startTime = originalClip.startTime + relativeCutTime,
+            trimStart = originalClip.trimStart + relativeCutTime,
+            duration = originalClip.duration - relativeCutTime
+          )
+
+          track.copy(clips = track.clips.patch(clipIndex, List(leftClip, rightClip), 1))
+      else
+        track
+    }
+    timeline.copy(videoTracks = updatedTracks)
