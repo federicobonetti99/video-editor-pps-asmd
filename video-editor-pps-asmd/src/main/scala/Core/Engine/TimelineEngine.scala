@@ -48,3 +48,20 @@ object TimelineEngine:
         track
     }
     timeline.copy(videoTracks = updatedTracks)
+
+  def snapClipsTogether(timeline: Timeline, trackId: Int): Timeline =
+    val updatedTracks = timeline.videoTracks.map { track =>
+      if track.id == trackId then
+        val snappedClips = track.clips.foldLeft(List.empty[VideoClip]) { (accumulated, currentClip) =>
+          accumulated.lastOption match
+            case Some(lastClip) =>
+              val nextStartTime = lastClip.startTime + lastClip.duration
+              accumulated :+ currentClip.copy(startTime = nextStartTime)
+            case None =>
+              accumulated :+ currentClip.copy(startTime = 0.0)
+        }
+        track.copy(clips = snappedClips)
+      else
+        track
+    }
+    timeline.copy(videoTracks = updatedTracks)

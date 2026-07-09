@@ -86,3 +86,19 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     rightClip.duration shouldBe 6.0
     rightClip.trimStart shouldBe 4.0
   }
+
+  test("Snap clips together to remove gaps and overlaps inside a video track") {
+    val clip1 = VideoClip("v1.mp4", startTime = 0.0, trimStart = 0.0, duration = 5.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val clip2 = VideoClip("v2.mp4", startTime = 2.0, trimStart = 0.0, duration = 4.0, sourceLength = 10.0, effect = VideoEffect.None) // Overlaps clip1!
+    val clip3 = VideoClip("v3.mp4", startTime = 20.0, trimStart = 0.0, duration = 3.0, sourceLength = 10.0, effect = VideoEffect.None) // Leaves a huge gap!
+
+    val messyTrack = VideoTrack(id = 1, clips = List(clip1, clip2, clip3))
+    val timelineWithMessyTrack = Timeline(videoTracks = List(messyTrack), audioTracks = List.empty)
+
+    val updatedTimeline = TimelineEngine.snapClipsTogether(timelineWithMessyTrack, trackId = 1)
+    val snappedClips = updatedTimeline.videoTracks.head.clips
+
+    snappedClips(0).startTime shouldBe 0.0
+    snappedClips(1).startTime shouldBe 5.0
+    snappedClips(2).startTime shouldBe 9.0
+  }
