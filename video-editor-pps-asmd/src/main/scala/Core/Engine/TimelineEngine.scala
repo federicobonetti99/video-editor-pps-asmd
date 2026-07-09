@@ -65,3 +65,10 @@ object TimelineEngine:
         track
     }
     timeline.copy(videoTracks = updatedTracks)
+
+  def getVideoClipsAtTime(timeline: Timeline, timestamp: Double): List[VideoClip] =
+    timeline.videoTracks.flatMap { track =>
+      track.clips.filter { clip =>
+        timestamp >= clip.startTime && timestamp < (clip.startTime + clip.duration)
+      }
+    }

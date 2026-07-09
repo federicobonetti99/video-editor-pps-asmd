@@ -102,3 +102,17 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     snappedClips(1).startTime shouldBe 5.0
     snappedClips(2).startTime shouldBe 9.0
   }
+
+  test("Retrieve the active video clips at a specific timestamp") {
+    val clip1 = VideoClip("v1.mp4", startTime = 0.0, trimStart = 0.0, duration = 5.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val clip2 = VideoClip("v2.mp4", startTime = 5.0, trimStart = 0.0, duration = 7.0, sourceLength = 10.0, effect = VideoEffect.None)
+
+    val track = VideoTrack(id = 1, clips = List(clip1, clip2))
+    val timeline = Timeline(videoTracks = List(track), audioTracks = List.empty)
+    val activeClipsAtSeven = TimelineEngine.getVideoClipsAtTime(timeline, timestamp = 7.0)
+    activeClipsAtSeven should have size 1
+    activeClipsAtSeven.head shouldBe clip2
+
+    val activeClipsAtEmptyTime = TimelineEngine.getVideoClipsAtTime(timeline, timestamp = 99.0)
+    activeClipsAtEmptyTime shouldBe empty
+  }
