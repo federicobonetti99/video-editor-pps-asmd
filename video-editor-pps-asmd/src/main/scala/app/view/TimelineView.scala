@@ -8,10 +8,10 @@ import core.model.*
 import scalafx.scene.layout.{HBox, Pane, VBox}
 
 class TimelineView(
-                    onAddRequested: () => Unit,
-                    onCutRequested: () => Unit,
-                    onSnapRequested: () => Unit
-                  ) extends VBox:
+    onAddRequested: () => Unit,
+    onCutRequested: () => Unit,
+    onSnapRequested: () => Unit
+  ) extends VBox:
 
   spacing = 15
   style = "-fx-padding: 10;"

@@ -14,6 +14,16 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     duration = 10.0,
     VideoEffect.None
   )
+
+  val secondSampleClip: VideoClip = VideoClip(
+    sourceUrl = "video2.mp4",
+    sourceLength = 5.0,
+    startTime = 5.0,
+    trimStart = 0.0,
+    duration = 5.0,
+    effect = VideoEffect.None
+  )
+
   private val emptyTrack = VideoTrack(id = 1, clips = List.empty)
   private val initialTimeline = Timeline(videoTracks = List(emptyTrack), audioTracks = List.empty)
 
@@ -115,4 +125,31 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
 
     val activeClipsAtEmptyTime = TimelineEngine.getVideoClipsAtTime(timeline, timestamp = 99.0)
     activeClipsAtEmptyTime shouldBe empty
+  }
+
+  test("addVideoClip using INSERT mode should split the existing clip and shift the subsequent ones") {
+    val initialTrack = VideoTrack(id = 1, clips = Nil)
+    val emptyTimeline = Timeline(videoTracks = List(initialTrack), audioTracks = Nil)
+    val timelineWithFirstClip = TimelineEngine.addVideoClip(emptyTimeline, 1, sampleClip)
+    val resultingTimeline = TimelineEngine.addVideoClip(timelineWithFirstClip, 1, secondSampleClip)
+    val resultingClips = resultingTimeline.videoTracks.find(_.id == 1).get.clips
+    assert(resultingClips.size == 3, s"Expected 3 clips, but found ${resultingClips.size}")
+
+    val sortedClips = resultingClips.sortBy(_.startTime)
+
+    val firstPart = sortedClips(0)
+    val insertedClip = sortedClips(1)
+    val secondPart = sortedClips(2)
+
+    assert(firstPart.sourceUrl == "video1.mp4")
+    assert(firstPart.startTime == 0.0)
+    assert(firstPart.duration == 5.0, s"Expected first part duration to be 5.0, got ${firstPart.duration}")
+
+    assert(insertedClip.sourceUrl == "video2.mp4")
+    assert(insertedClip.startTime == 5.0)
+    assert(insertedClip.duration == 5.0)
+
+    assert(secondPart.sourceUrl == "video1.mp4")
+    assert(secondPart.startTime == 10.0, s"Expected second part to shift to 10.0, but was at ${secondPart.startTime}")
+    assert(secondPart.duration == 5.0)
   }
