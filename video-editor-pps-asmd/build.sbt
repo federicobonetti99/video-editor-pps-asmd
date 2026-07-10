@@ -8,5 +8,9 @@ ThisBuild / organizationName := "example"
 lazy val root = (project in file("."))
   .settings(
     name := "video-editor-pps-asmd",
-    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+      "org.scalafx"   %% "scalafx"   % "22.0.0-R33"
+    ),
+    fork := true
   )
