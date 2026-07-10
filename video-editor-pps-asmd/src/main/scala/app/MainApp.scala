@@ -1,10 +1,10 @@
-package App
+package app
 
 import scalafx.application.JFXApp3
 import scalafx.scene.Scene
-import Core.Model.*
-import Core.Engine.TimelineEngine
-import App.View.TimelineView
+import core.model.*
+import core.engine.TimelineEngine
+import app.view.TimelineView
 
 object MainApp extends JFXApp3:
 //EXAMPLE MAIN IN THIS VERSION FOR TESTS

@@ -1,4 +1,4 @@
-package Core.Model
+package core.model
 
 sealed trait MediaClip:
   def sourceUrl: String

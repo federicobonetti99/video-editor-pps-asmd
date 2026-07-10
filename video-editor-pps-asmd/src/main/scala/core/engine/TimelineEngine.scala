@@ -1,6 +1,6 @@
-package Core.Engine
+package core.engine
 
-import Core.Model.*
+import core.model.*
 
 object TimelineEngine:
 

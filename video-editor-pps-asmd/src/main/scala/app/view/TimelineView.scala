@@ -1,10 +1,10 @@
-package App.View
+package app.view
 
 import scalafx.application.{JFXApp3, Platform}
 import scalafx.scene.control.Button
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.paint.Color
-import Core.Model.*
+import core.model.*
 import scalafx.scene.layout.{HBox, Pane, VBox}
 
 class TimelineView(

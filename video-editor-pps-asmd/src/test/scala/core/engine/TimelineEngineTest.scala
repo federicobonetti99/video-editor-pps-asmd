@@ -1,8 +1,8 @@
-package Core.Engine
+package core.engine
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
-import Core.Model.*
+import core.model.*
 
 class TimelineEngineTest extends AnyFunSuite with Matchers:
 
