@@ -1,5 +1,6 @@
 package app.controller
 
+import scalafx.Includes.*
 import core.model.*
 import core.engine.*
 import app.view.TimelineView
@@ -26,6 +27,8 @@ class TimelineController:
 
   private val view = new TimelineView()
 
+  private val inputHandler = new InputHandler(onTogglePlayback = view.onTogglePlaybackRequested)
+
   view.onAddRequested = { cursorTime =>
     val clipAtCursor = sampleClip.copy(startTime = cursorTime)
     currentTimeline = TimelineEngine.addVideoClip(currentTimeline, 1, clipAtCursor)
@@ -50,6 +53,10 @@ class TimelineController:
     view.render(currentTimeline)
   }
 
+  view.onTimeChanged = { newCursorTime =>
+    currentTime = newCursorTime
+  }
+
   view.onTogglePlaybackRequested = { () =>
     currentPlayerState = currentPlayerState match
       case Paused =>
@@ -61,6 +68,9 @@ class TimelineController:
         Paused
     println(s"Player state changed to: $currentPlayerState")
   }
+
+  view.onKeyReleased = (event: scalafx.scene.input.KeyEvent) => inputHandler.handleKeyEvent(event)
+
 
   private var lastTimeNano: Long = 0L
 
@@ -80,10 +90,6 @@ class TimelineController:
         timer.stop()
 
       lastTimeNano = currentNano
-  }
-
-  view.onTimeChanged = { newCursorTime =>
-    currentTime = newCursorTime
   }
 
   def viewComponent: VBox = view
