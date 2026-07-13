@@ -120,3 +120,14 @@ object TimelineEngine:
         timestamp >= clip.startTime && timestamp < (clip.startTime + clip.duration)
       }
     }
+
+  def updatePlaybackTime(
+                          currentTime: Double,
+                          state: PlayerState,
+                          deltaTime: Double,
+                          maxDuration: Double
+                        ): Double = state match
+    case Paused => currentTime
+    case Playing(speed) =>
+      val nextTime = currentTime + (deltaTime * speed)
+      if nextTime >= maxDuration then maxDuration else nextTime
