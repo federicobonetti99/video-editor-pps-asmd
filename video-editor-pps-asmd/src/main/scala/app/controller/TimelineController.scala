@@ -6,6 +6,7 @@ import core.engine.*
 import app.view.TimelineView
 import scalafx.scene.layout.VBox
 import scalafx.animation.AnimationTimer
+import java.io.File
 
 class TimelineController:
 
@@ -28,36 +29,43 @@ class TimelineController:
   private val view = new TimelineView()
   private val inputHandler = new InputHandler(onTogglePlayback = view.onTogglePlaybackRequested)
 
-  private def refreshTimelineDuration(): Unit =
-    val dellaTimelineDurata = currentTimeline.videoTracks
+  private def syncVideoPreview(): Unit =
+    val activeClipOpt = currentTimeline.videoTracks
       .flatMap(_.clips)
-      .map(c => c.startTime + c.duration)
-      .maxOption
-      .getOrElse(0.0)
+      .find(c => currentTime >= c.startTime && currentTime < (c.startTime + c.duration))
 
-
+    activeClipOpt match
+      case Some(clip) =>
+        val relativeTime = (currentTime - clip.startTime) + clip.trimStart
+        val isPlaying = currentPlayerState match
+          case Playing(_) => true
+          case Paused => false
+        view.updatePreview(Some(clip.sourceUrl), relativeTime, isPlaying)
+      case None =>
+        view.updatePreview(None, 0.0, false)
 
   view.onImportRequested = { () =>
     val currentWindow = view.getScene.getWindow
-  
+
     app.utils.MediaImporter.chooseVideoFile(currentWindow) match
       case Some((file, durataReale)) =>
-  
+        val fileUrl = file.toURI.toString
+
         val importedClip = VideoClip(
-          sourceUrl = file.getName,
+          sourceUrl = fileUrl,
           sourceLength = durataReale,
           startTime = currentTime,
           trimStart = 0.0,
           duration = durataReale,
           effect = VideoEffect.None
         )
-  
+
         currentTimeline = TimelineEngine.addVideoClip(currentTimeline, 1, importedClip)
-  
-        refreshTimelineDuration()
+
         view.render(currentTimeline)
-        println(s"🟢 Importato con DURATA REALE: ${file.getName} | Durata: $durataReale secondi")
-  
+        syncVideoPreview()
+        println(s"🟢 Importato: ${file.getName} | Durata: $durataReale secondi")
+
       case None =>
         println("🟡 Selezione del file annullata.")
   }
@@ -65,8 +73,8 @@ class TimelineController:
   view.onAddRequested = { cursorTime =>
     val clipAtCursor = sampleClip.copy(startTime = cursorTime)
     currentTimeline = TimelineEngine.addVideoClip(currentTimeline, 1, clipAtCursor)
-    refreshTimelineDuration()
     view.render(currentTimeline)
+    syncVideoPreview()
   }
 
   view.onCutRequested = { cursorTime =>
@@ -79,18 +87,19 @@ class TimelineController:
       val targetClip = track.clips(clipIndexOpt)
       val relativeCut = cursorTime - targetClip.startTime
       currentTimeline = TimelineEngine.cutVideoClip(currentTimeline, 1, clipIndexOpt, relativeCut)
-      refreshTimelineDuration()
       view.render(currentTimeline)
+      syncVideoPreview()
   }
 
   view.onSnapRequested = { () =>
     currentTimeline = TimelineEngine.snapClipsTogether(currentTimeline, 1)
-    refreshTimelineDuration()
     view.render(currentTimeline)
+    syncVideoPreview()
   }
 
   view.onTimeChanged = { newCursorTime =>
     currentTime = newCursorTime
+    syncVideoPreview()
   }
 
   view.onTogglePlaybackRequested = { () =>
@@ -102,6 +111,7 @@ class TimelineController:
       case Playing(_) =>
         timer.stop()
         Paused
+    syncVideoPreview()
     println(s"Player state changed to: $currentPlayerState")
   }
 
@@ -112,24 +122,24 @@ class TimelineController:
       lastTimeNano = currentNano
     else
       val deltaTime = (currentNano - lastTimeNano) / 1e9
-
-      val currentMax = currentTimeline.videoTracks.flatMap(_.clips).map(c => c.startTime + c.duration).maxOption.getOrElse(0.0)
-      val limit = Math.max(60.0, currentMax)
+      val limit = 60.0
 
       val nextTime = TimelineEngine.updatePlaybackTime(currentTime, currentPlayerState, deltaTime, limit)
 
       if nextTime != currentTime then
         currentTime = nextTime
         view.updateTimelineTime(currentTime)
+        syncVideoPreview()
 
       if currentTime >= limit then
         currentPlayerState = Paused
         timer.stop()
+        syncVideoPreview()
 
       lastTimeNano = currentNano
   }
 
   def viewComponent: VBox = view
 
-  refreshTimelineDuration()
   view.render(currentTimeline)
+  syncVideoPreview()

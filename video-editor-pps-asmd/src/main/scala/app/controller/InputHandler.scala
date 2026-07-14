@@ -9,4 +9,4 @@ class InputHandler(onTogglePlayback: () => Unit):
         onTogglePlayback()
         event.consume()
 
-      case _ => 
+      case _ =>
