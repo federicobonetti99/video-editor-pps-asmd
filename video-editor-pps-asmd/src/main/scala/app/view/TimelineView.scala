@@ -66,21 +66,25 @@ class TimelineView extends VBox:
     strokeWidth = 2
   }
 
+  var onImportRequested: () => Unit = () => ()
+
   private val controls = new HBox {
     spacing = 10
     alignment = Pos.CenterLeft
 
+    val btnImport = new Button("📥 Import Video File")
     val btnAdd = new Button("Add Clip at Cursor")
     val btnCut = new Button("Cut at Cursor")
     val btnSnap = new Button("Snap Clips")
     val btnPlay = new Button("Play/Pause")
 
+    btnImport.onAction = _ => onImportRequested()
     btnAdd.onAction = _ => onAddRequested(timeSlider.value.value)
     btnCut.onAction = _ => onCutRequested(timeSlider.value.value)
     btnSnap.onAction = _ => onSnapRequested()
     btnPlay.onAction = _ => onTogglePlaybackRequested()
 
-    children = Seq(btnAdd, btnCut, btnSnap, btnPlay, timeLabel)
+    children = Seq(btnImport, btnAdd, btnCut, btnSnap, btnPlay, timeLabel)
   }
 
   children = Seq(timeSlider, timelinePane, controls)
@@ -90,6 +94,8 @@ class TimelineView extends VBox:
       onTogglePlaybackRequested()
       event.consume()
   })
+
+
 
   private def updatePlayheadPosition(seconds: Double): Unit =
     playheadLine.startX = seconds * viewCtx.pixelsPerSecond
@@ -113,7 +119,16 @@ class TimelineView extends VBox:
             arcWidth = 8
             arcHeight = 8
           }
-          timelinePane.children.add(clipRectangle)
+          
+          val clipLabel = new scalafx.scene.control.Label {
+            text = videoClip.sourceUrl
+            layoutX = (videoClip.startTime * viewCtx.pixelsPerSecond) + 5
+            layoutY = 65 
+            style = "-fx-text-fill: black; -fx-font-weight: bold; -fx-font-size: 11px;"
+            maxWidth = (videoClip.duration * viewCtx.pixelsPerSecond) - 10
+          }
+
+          timelinePane.children.addAll(clipRectangle, clipLabel)
         }
       }
       updatePlayheadPosition(timeSlider.value.value)
