@@ -27,7 +27,6 @@ class TimelineController:
   private val view = new TimelineView()
   private val inputHandler = new InputHandler(onTogglePlayback = view.onTogglePlaybackRequested)
 
-  // Calcola quale clip è attiva sotto il cursore
   private def getActiveClip(): Option[VideoClip] =
     currentTimeline.videoTracks
       .flatMap(_.clips)
@@ -44,7 +43,6 @@ class TimelineController:
       case None =>
         view.updatePreview(None, 0.0, false)
 
-  // --- CALLBACK DELLA VIEW ---
 
   view.onImportRequested = { () =>
     val currentWindow = view.getScene.getWindow
@@ -92,19 +90,37 @@ class TimelineController:
     syncVideoPreview()
   }
 
-  // Quando l'utente trascina manualmente lo slider
   view.onTimeChanged = { newCursorTime =>
     currentTime = newCursorTime
     syncVideoPreview()
   }
 
-  // Quando il video si muove, aggiorna la posizione corrente nel controller
   view.onVideoTimeUpdated = { newVideoTime =>
-    getActiveClip() match
+    val previousClip = getActiveClip()
+
+    previousClip match
       case Some(clip) =>
         currentTime = clip.startTime + newVideoTime - clip.trimStart
         view.updateTimelineTime(currentTime)
       case None => ()
+
+    val currentClip = getActiveClip()
+
+    if previousClip != currentClip then
+      currentClip match
+        case Some(newClip) =>
+          val relativeTime = (currentTime - newClip.startTime) + newClip.trimStart
+
+          println(s"🎬 Taglio rilevato! Passaggio a: ${newClip.sourceUrl} al secondo: $relativeTime")
+
+          val isPlaying = currentPlayerState match
+            case Playing(_) => true
+            case Paused => false
+
+          view.updatePreview(Some(newClip.sourceUrl), relativeTime, isPlaying)
+
+        case None =>
+          view.updatePreview(None, 0.0, false)
   }
 
   view.onTogglePlaybackRequested = { () =>
