@@ -19,6 +19,7 @@ class TimelineView extends VBox:
   var onTogglePlaybackRequested: () => Unit = () => ()
   var onTimeChanged: Double => Unit = _ => ()
   var onImportRequested: () => Unit = () => ()
+  var onVideoTimeUpdated: Double => Unit = _ => ()
 
   private val preview = new VideoPreview(480.0, 270.0)
   private val timelinePanel = new TimelinePanel()
@@ -54,13 +55,8 @@ class TimelineView extends VBox:
     Platform.runLater { timeSlider.value = seconds }
 
   def updatePreview(videoUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
-    preview.update(videoUrlOpt, relativeTimeSeconds, isPlaying)
+    preview.update(videoUrlOpt, relativeTimeSeconds, isPlaying, onVideoTimeUpdated)
 
   def render(timeline: Timeline): Unit =
     timelinePanel.draw(timeline, timeSlider.value.value)
 
-  this.addEventHandler(KeyEvent.KeyReleased, (event: KeyEvent) => {
-    if event.code == KeyCode.Space then
-      onTogglePlaybackRequested()
-      event.consume()
-  })

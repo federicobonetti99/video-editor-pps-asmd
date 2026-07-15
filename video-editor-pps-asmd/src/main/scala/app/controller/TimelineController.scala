@@ -5,7 +5,6 @@ import core.model.*
 import core.engine.*
 import app.view.TimelineView
 import scalafx.scene.layout.VBox
-import scalafx.animation.AnimationTimer
 import java.io.File
 
 class TimelineController:
@@ -24,17 +23,18 @@ class TimelineController:
 
   private var currentTime: Double = 0.0
   private var currentPlayerState: PlayerState = Paused
-  private var lastTimeNano: Long = 0L
 
   private val view = new TimelineView()
   private val inputHandler = new InputHandler(onTogglePlayback = view.onTogglePlaybackRequested)
 
-  private def syncVideoPreview(): Unit =
-    val activeClipOpt = currentTimeline.videoTracks
+  // Calcola quale clip è attiva sotto il cursore
+  private def getActiveClip(): Option[VideoClip] =
+    currentTimeline.videoTracks
       .flatMap(_.clips)
       .find(c => currentTime >= c.startTime && currentTime < (c.startTime + c.duration))
 
-    activeClipOpt match
+  private def syncVideoPreview(): Unit =
+    getActiveClip() match
       case Some(clip) =>
         val relativeTime = (currentTime - clip.startTime) + clip.trimStart
         val isPlaying = currentPlayerState match
@@ -44,13 +44,13 @@ class TimelineController:
       case None =>
         view.updatePreview(None, 0.0, false)
 
+  // --- CALLBACK DELLA VIEW ---
+
   view.onImportRequested = { () =>
     val currentWindow = view.getScene.getWindow
-
     app.utils.MediaImporter.chooseVideoFile(currentWindow) match
       case Some((file, durataReale)) =>
         val fileUrl = file.toURI.toString
-
         val importedClip = VideoClip(
           sourceUrl = fileUrl,
           sourceLength = durataReale,
@@ -59,15 +59,11 @@ class TimelineController:
           duration = durataReale,
           effect = VideoEffect.None
         )
-
         currentTimeline = TimelineEngine.addVideoClip(currentTimeline, 1, importedClip)
-
         view.render(currentTimeline)
         syncVideoPreview()
-        println(s"🟢 Importato: ${file.getName} | Durata: $durataReale secondi")
-
       case None =>
-        println("🟡 Selezione del file annullata.")
+        println("🟡 Selezione annullata.")
   }
 
   view.onAddRequested = { cursorTime =>
@@ -82,7 +78,6 @@ class TimelineController:
     val clipIndexOpt = track.clips.indexWhere { c =>
       cursorTime >= c.startTime && cursorTime < (c.startTime + c.duration)
     }
-
     if clipIndexOpt != -1 then
       val targetClip = track.clips(clipIndexOpt)
       val relativeCut = cursorTime - targetClip.startTime
@@ -97,47 +92,31 @@ class TimelineController:
     syncVideoPreview()
   }
 
+  // Quando l'utente trascina manualmente lo slider
   view.onTimeChanged = { newCursorTime =>
     currentTime = newCursorTime
     syncVideoPreview()
   }
 
+  // Quando il video si muove, aggiorna la posizione corrente nel controller
+  view.onVideoTimeUpdated = { newVideoTime =>
+    getActiveClip() match
+      case Some(clip) =>
+        currentTime = clip.startTime + newVideoTime - clip.trimStart
+        view.updateTimelineTime(currentTime)
+      case None => ()
+  }
+
   view.onTogglePlaybackRequested = { () =>
     currentPlayerState = currentPlayerState match
       case Paused =>
-        lastTimeNano = 0L
-        timer.start()
         Playing(speed = 1.0)
       case Playing(_) =>
-        timer.stop()
         Paused
     syncVideoPreview()
-    println(s"Player state changed to: $currentPlayerState")
   }
 
   view.onKeyReleased = (event: scalafx.scene.input.KeyEvent) => inputHandler.handleKeyEvent(event)
-
-  private val timer: AnimationTimer = AnimationTimer { currentNano =>
-    if lastTimeNano == 0L then
-      lastTimeNano = currentNano
-    else
-      val deltaTime = (currentNano - lastTimeNano) / 1e9
-      val limit = 60.0
-
-      val nextTime = TimelineEngine.updatePlaybackTime(currentTime, currentPlayerState, deltaTime, limit)
-
-      if nextTime != currentTime then
-        currentTime = nextTime
-        view.updateTimelineTime(currentTime)
-        syncVideoPreview()
-
-      if currentTime >= limit then
-        currentPlayerState = Paused
-        timer.stop()
-        syncVideoPreview()
-
-      lastTimeNano = currentNano
-  }
 
   def viewComponent: VBox = view
 

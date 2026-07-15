@@ -27,7 +27,7 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
   private var currentLoadedUrl: Option[String] = None
   private var lastRequestedPlayingState: Option[Boolean] = None
 
-  def update(videoUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
+  def update(videoUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean, onTimeUpdated: Double => Unit): Unit =
     Platform.runLater {
       videoUrlOpt match
         case Some(url) =>
@@ -50,24 +50,33 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
               jfxPlayer.setOnReady(() => {
                 jfxPlayer.seek(javafx.util.Duration.millis(relativeTimeSeconds * 1000.0))
               })
+
+              jfxPlayer.currentTimeProperty().addListener { (_, _, newTime) =>
+                if jfxPlayer.getStatus == javafx.scene.media.MediaPlayer.Status.PLAYING then
+                  onTimeUpdated(newTime.toSeconds)
+              }
+
             } catch {
               case e: Exception => println(s"❌ Errore caricamento video: ${e.getMessage}")
             }
 
-          activeJfxPlayer.foreach { player =>
+          activeJfxPlayer.foreach {
+            player =>
             val targetTime = javafx.util.Duration.millis(relativeTimeSeconds * 1000.0)
 
             if isPlaying then
               if !lastRequestedPlayingState.contains(true) then
                 lastRequestedPlayingState = Some(true)
-                player.seek(targetTime)
-                player.play()
-              else
-                if !lastRequestedPlayingState.contains(false) then
-                  lastRequestedPlayingState = Some(false)
-                  player.pause()
-                  player.seek(targetTime)
+              player.seek(targetTime)
+              player.play()
 
+            else
+              if !lastRequestedPlayingState.contains(false) then
+                lastRequestedPlayingState = Some(false)
+                player.pause()
+                player.seek(targetTime)
+
+              // Solo quando siamo in PAUSA, gestiamo lo spostamento manuale (scrubbing) dello slider
               val diff = Math.abs(player.getCurrentTime.toSeconds - relativeTimeSeconds)
               if diff > 0.15 then
                 player.seek(targetTime)

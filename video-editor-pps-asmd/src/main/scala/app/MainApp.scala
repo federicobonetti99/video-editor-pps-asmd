@@ -11,6 +11,7 @@ object MainApp extends JFXApp3:
 
     stage = new JFXApp3.PrimaryStage {
       title = "Video Editor Timeline"
+      maximized = true
       width = 650
       height = 320
       scene = new Scene {
