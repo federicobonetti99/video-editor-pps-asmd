@@ -9,15 +9,6 @@ import java.io.File
 
 class TimelineController:
 
-  private val sampleClip = VideoClip(
-    sourceUrl = "video1.mp4",
-    sourceLength = 10.0,
-    startTime = 0.0,
-    trimStart = 0.0,
-    duration = 10.0,
-    effect = VideoEffect.None
-  )
-
   private val initialTrack = VideoTrack(id = 1, clips = Nil)
   private var currentTimeline = Timeline(videoTracks = List(initialTrack), audioTracks = Nil)
 
@@ -64,11 +55,21 @@ class TimelineController:
         println("🟡 Selezione annullata.")
   }
 
-  view.onAddRequested = { cursorTime =>
-    val clipAtCursor = sampleClip.copy(startTime = cursorTime)
-    currentTimeline = TimelineEngine.addVideoClip(currentTimeline, 1, clipAtCursor)
-    view.render(currentTimeline)
-    syncVideoPreview()
+  // Sostituito view.onAddRequested con view.onDeleteRequested
+  view.onDeleteRequested = { () =>
+    val track = currentTimeline.videoTracks.find(_.id == 1).get
+    // Troviamo l'indice della clip attualmente sotto il cursore
+    val clipIndexOpt = track.clips.indexWhere { c =>
+      currentTime >= c.startTime && currentTime < (c.startTime + c.duration)
+    }
+
+    if clipIndexOpt != -1 then
+      println(s"🗑️ Eliminazione della clip all'indice: $clipIndexOpt")
+      currentTimeline = TimelineEngine.removeVideoClip(currentTimeline, trackId = 1, clipIndex = clipIndexOpt)
+      view.render(currentTimeline)
+      syncVideoPreview()
+    else
+      println("⚠️ Nessuna clip sotto il cursore da eliminare.")
   }
 
   view.onCutRequested = { cursorTime =>

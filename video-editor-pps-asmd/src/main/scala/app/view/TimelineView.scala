@@ -13,7 +13,7 @@ class TimelineView extends VBox:
   spacing = 15
   style = "-fx-padding: 15; -fx-background-color: #1a1a1a;"
 
-  var onAddRequested: Double => Unit = _ => ()
+  var onDeleteRequested: () => Unit = () => ()
   var onCutRequested: Double => Unit = _ => ()
   var onSnapRequested: () => Unit = () => ()
   var onTogglePlaybackRequested: () => Unit = () => ()
@@ -21,6 +21,7 @@ class TimelineView extends VBox:
   var onImportRequested: () => Unit = () => ()
   var onVideoTimeUpdated: Double => Unit = _ => ()
 
+  // 1. DICHIARIAMO PRIMA TUTTI I COMPONENTI INDIPENDENTI
   private val preview = new VideoPreview(480.0, 270.0)
   private val timelinePanel = new TimelinePanel()
 
@@ -32,14 +33,16 @@ class TimelineView extends VBox:
     maxWidth = 800
   }
 
+  // 2. ORA DICHIARIAMO LA TOOLBAR (che fa riferimento a timeSlider in modo sicuro)
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
-    onAdd = () => onAddRequested(timeSlider.value.value),
+    onDelete = () => onDeleteRequested(),
     onCut = () => onCutRequested(timeSlider.value.value),
     onSnap = () => onSnapRequested(),
     onPlay = () => onTogglePlaybackRequested()
   )
 
+  // 3. ASSEGNAZIONE DEI CHILDREN ALLA FINE
   children = Seq(preview, timeSlider, timelinePanel, toolbar)
 
   timeSlider.valueProperty.addListener { (_, _, newValue) =>
@@ -59,4 +62,3 @@ class TimelineView extends VBox:
 
   def render(timeline: Timeline): Unit =
     timelinePanel.draw(timeline, timeSlider.value.value)
-

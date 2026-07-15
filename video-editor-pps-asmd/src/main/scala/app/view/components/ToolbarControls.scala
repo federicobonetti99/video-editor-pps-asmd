@@ -6,7 +6,7 @@ import scalafx.geometry.Pos
 
 class ToolbarControls(
                        onImport: () => Unit,
-                       onAdd: () => Unit,
+                       onDelete: () => Unit,
                        onCut: () => Unit,
                        onSnap: () => Unit,
                        onPlay: () => Unit
@@ -16,7 +16,7 @@ class ToolbarControls(
   alignment = Pos.CenterLeft
 
   val btnImport = new Button("📥 Import Video File") { onAction = _ => onImport() }
-  val btnAdd = new Button("Add Clip at Cursor") { onAction = _ => onAdd() }
+  val btnDelete = new Button("🗑️ Delete Selected") { onAction = _ => onDelete() }
   val btnCut = new Button("Cut at Cursor") { onAction = _ => onCut() }
   val btnSnap = new Button("Snap Clips") { onAction = _ => onSnap() }
   val btnPlay = new Button("Play/Pause") { onAction = _ => onPlay() }
@@ -26,7 +26,7 @@ class ToolbarControls(
     style = "-fx-text-fill: white; -fx-font-family: 'Courier New'; -fx-font-size: 14px;"
   }
 
-  children = Seq(btnImport, btnAdd, btnCut, btnSnap, btnPlay, timeLabel)
+  children = Seq(btnImport, btnDelete, btnCut, btnSnap, btnPlay, timeLabel)
 
   def updateTimeLabel(seconds: Double): Unit =
     timeLabel.text = f"Time: ${seconds.toInt / 60}%02d:${seconds % 60}%05.2f"
