@@ -76,7 +76,6 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
                 player.pause()
                 player.seek(targetTime)
 
-              // Solo quando siamo in PAUSA, gestiamo lo spostamento manuale (scrubbing) dello slider
               val diff = Math.abs(player.getCurrentTime.toSeconds - relativeTimeSeconds)
               if diff > 0.15 then
                 player.seek(targetTime)

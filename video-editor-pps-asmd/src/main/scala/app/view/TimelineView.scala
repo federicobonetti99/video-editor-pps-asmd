@@ -33,7 +33,6 @@ class TimelineView extends VBox:
     maxWidth = 800
   }
 
-  // 2. ORA DICHIARIAMO LA TOOLBAR (che fa riferimento a timeSlider in modo sicuro)
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
     onDelete = () => onDeleteRequested(),
@@ -42,7 +41,6 @@ class TimelineView extends VBox:
     onPlay = () => onTogglePlaybackRequested()
   )
 
-  // 3. ASSEGNAZIONE DEI CHILDREN ALLA FINE
   children = Seq(preview, timeSlider, timelinePanel, toolbar)
 
   timeSlider.valueProperty.addListener { (_, _, newValue) =>

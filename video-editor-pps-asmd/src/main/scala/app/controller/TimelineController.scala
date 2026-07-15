@@ -5,7 +5,6 @@ import core.model.*
 import core.engine.*
 import app.view.TimelineView
 import scalafx.scene.layout.VBox
-import java.io.File
 
 class TimelineController:
 
@@ -55,10 +54,8 @@ class TimelineController:
         println("🟡 Selezione annullata.")
   }
 
-  // Sostituito view.onAddRequested con view.onDeleteRequested
   view.onDeleteRequested = { () =>
     val track = currentTimeline.videoTracks.find(_.id == 1).get
-    // Troviamo l'indice della clip attualmente sotto il cursore
     val clipIndexOpt = track.clips.indexWhere { c =>
       currentTime >= c.startTime && currentTime < (c.startTime + c.duration)
     }
