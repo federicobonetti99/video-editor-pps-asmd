@@ -20,10 +20,13 @@ class TimelineView extends VBox:
   var onTimeChanged: Double => Unit = _ => ()
   var onImportRequested: () => Unit = () => ()
   var onVideoTimeUpdated: Double => Unit = _ => ()
+  var onClipSelected: (String, Int, Int) => Unit = (_, _, _) => ()
 
-  // 1. DICHIARIAMO PRIMA TUTTI I COMPONENTI INDIPENDENTI
   private val preview = new VideoPreview(480.0, 270.0)
   private val timelinePanel = new TimelinePanel()
+
+  timelinePanel.onClipSelected = (mediaType, trackId, clipIndex) =>
+    onClipSelected(mediaType, trackId, clipIndex)
 
   private val timeSlider = new Slider {
     min = 0.0
@@ -58,5 +61,5 @@ class TimelineView extends VBox:
   def updatePreview(videoUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
     preview.update(videoUrlOpt, relativeTimeSeconds, isPlaying, onVideoTimeUpdated)
 
-  def render(timeline: Timeline): Unit =
-    timelinePanel.draw(timeline, timeSlider.value.value)
+  def render(timeline: Timeline, selectedClip: Option[(String, Int, Int)] = None): Unit =
+    timelinePanel.draw(timeline, timeSlider.value.value, selectedClip)

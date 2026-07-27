@@ -20,6 +20,9 @@ class TimelineController:
   private var currentTime: Double = 0.0
   private var currentPlayerState: PlayerState = Paused
 
+  // Stato per memorizzare la clip selezionata: (mediaType, trackId, clipIndex)
+  private var selectedClip: Option[(String, Int, Int)] = None
+
   private val view = new TimelineView()
   private val inputHandler = new InputHandler(onTogglePlayback = view.onTogglePlaybackRequested)
 
@@ -40,12 +43,25 @@ class TimelineController:
         view.updatePreview(None, 0.0, false)
 
 
+  view.onClipSelected = { (mediaType, trackId, clipIndex) =>
+    val clickedClip = (mediaType, trackId, clipIndex)
+
+    if selectedClip.contains(clickedClip) then
+      println(s"🔄 Clip deselezionata: $mediaType nella traccia $trackId all'indice $clipIndex")
+      selectedClip = None
+    else
+      println(s"📌 Nuova clip selezionata: $mediaType nella traccia $trackId all'indice $clipIndex")
+      selectedClip = Some(clickedClip)
+
+    view.render(currentTimeline, selectedClip)
+  }
+
   view.onImportRequested = { () =>
     val window: scalafx.stage.Window = view.scene.value.window.value
 
     MediaImporter.chooseVideoFile(window).foreach { (file, duration) =>
       val importedVideo = VideoClip(
-        sourceUrl = file.toURI.toString, // <-- QUI: evita l'errore URISyntaxException con gli spazi e C:\
+        sourceUrl = file.toURI.toString,
         sourceLength = duration,
         startTime = 0.0,
         trimStart = 0.0,
@@ -60,7 +76,7 @@ class TimelineController:
         videoClip = importedVideo
       )
 
-      view.render(currentTimeline)
+      view.render(currentTimeline, selectedClip)
       syncVideoPreview()
     }
   }
@@ -72,16 +88,13 @@ class TimelineController:
     }
 
     if clipIndexOpt != -1 then
-      println(s"🗑️ Eliminazione della clip video e audio all'indice: $clipIndexOpt")
-
-      var newTimeline = TimelineEngine.removeVideoClip(currentTimeline, trackId = 1, clipIndex = clipIndexOpt)
-      newTimeline = TimelineEngine.removeAudioClip(newTimeline, trackId = 1, clipIndex = clipIndexOpt)
+      var newTimeline = TimelineEngine.removeVideoClip(currentTimeline, 1, clipIndexOpt)
+      newTimeline = TimelineEngine.removeAudioClip(newTimeline, 1, clipIndexOpt)
 
       currentTimeline = newTimeline
-      view.render(currentTimeline)
+      selectedClip = None
+      view.render(currentTimeline, selectedClip)
       syncVideoPreview()
-    else
-      println("⚠️ Nessuna clip sotto il cursore da eliminare.")
   }
 
   view.onCutRequested = { cursorTime =>
@@ -94,19 +107,18 @@ class TimelineController:
       val targetClip = videoTrack.clips(clipIndexOpt)
       val relativeCut = cursorTime - targetClip.startTime
 
-
       var newTimeline = TimelineEngine.cutVideoClip(currentTimeline, 1, clipIndexOpt, relativeCut)
       newTimeline = TimelineEngine.cutAudioClip(newTimeline, 1, clipIndexOpt, relativeCut)
 
       currentTimeline = newTimeline
-      view.render(currentTimeline)
+      selectedClip = None
+      view.render(currentTimeline, selectedClip)
       syncVideoPreview()
   }
 
   view.onSnapRequested = { () =>
-    var newTimeline = TimelineEngine.snapClipsTogether(currentTimeline, trackId = 1)
-    currentTimeline = newTimeline
-    view.render(currentTimeline)
+    currentTimeline = TimelineEngine.snapClipsTogether(currentTimeline, 1)
+    view.render(currentTimeline, selectedClip)
     syncVideoPreview()
   }
 
@@ -130,9 +142,6 @@ class TimelineController:
       currentClip match
         case Some(newClip) =>
           val relativeTime = (currentTime - newClip.startTime) + newClip.trimStart
-
-          println(s"🎬 Taglio rilevato! Passaggio a: ${newClip.sourceUrl} al secondo: $relativeTime")
-
           val isPlaying = currentPlayerState match
             case Playing(_) => true
             case Paused => false
@@ -145,10 +154,8 @@ class TimelineController:
 
   view.onTogglePlaybackRequested = { () =>
     currentPlayerState = currentPlayerState match
-      case Paused =>
-        Playing(speed = 1.0)
-      case Playing(_) =>
-        Paused
+      case Paused => Playing(speed = 1.0)
+      case Playing(_) => Paused
     syncVideoPreview()
   }
 
@@ -156,5 +163,5 @@ class TimelineController:
 
   def viewComponent: VBox = view
 
-  view.render(currentTimeline)
+  view.render(currentTimeline, selectedClip)
   syncVideoPreview()
