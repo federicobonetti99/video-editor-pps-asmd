@@ -11,6 +11,7 @@ class TimelineController:
 
   private val initialVideoTrack = VideoTrack(id = 1, clips = Nil)
   private val initialAudioTrack = AudioTrack(id = 1, clips = Nil)
+  private val audioPlayer = new app.view.components.AudioPlayer()
 
   private var currentTimeline = Timeline(
     videoTracks = List(initialVideoTrack),
@@ -20,7 +21,6 @@ class TimelineController:
   private var currentTime: Double = 0.0
   private var currentPlayerState: PlayerState = Paused
 
-  // Stato per memorizzare la clip selezionata: (mediaType, trackId, clipIndex)
   private var selectedClip: Option[(String, Int, Int)] = None
 
   private val view = new TimelineView()
@@ -32,15 +32,18 @@ class TimelineController:
       .find(c => currentTime >= c.startTime && currentTime < (c.startTime + c.duration))
 
   private def syncVideoPreview(): Unit =
+    val isPlaying = currentPlayerState match
+      case Playing(_) => true
+      case Paused     => false
+
     getActiveClip() match
       case Some(clip) =>
         val relativeTime = (currentTime - clip.startTime) + clip.trimStart
-        val isPlaying = currentPlayerState match
-          case Playing(_) => true
-          case Paused => false
         view.updatePreview(Some(clip.sourceUrl), relativeTime, isPlaying)
       case None =>
         view.updatePreview(None, 0.0, false)
+
+    audioPlayer.sync(currentTimeline, currentTime, isPlaying)
 
 
   view.onClipSelected = { (mediaType, trackId, clipIndex) =>
@@ -82,38 +85,83 @@ class TimelineController:
   }
 
   view.onDeleteRequested = { () =>
-    val videoTrack = currentTimeline.videoTracks.find(_.id == 1).get
-    val clipIndexOpt = videoTrack.clips.indexWhere { c =>
-      currentTime >= c.startTime && currentTime < (c.startTime + c.duration)
-    }
+    selectedClip match
+      case Some((mediaType, trackId, clipIndex)) =>
+        currentTimeline = mediaType match
+          case "video" => TimelineEngine.removeVideoClip(currentTimeline, trackId, clipIndex)
+          case "audio" => TimelineEngine.removeAudioClip(currentTimeline, trackId, clipIndex)
+          case _       => currentTimeline
 
-    if clipIndexOpt != -1 then
-      var newTimeline = TimelineEngine.removeVideoClip(currentTimeline, 1, clipIndexOpt)
-      newTimeline = TimelineEngine.removeAudioClip(newTimeline, 1, clipIndexOpt)
+        selectedClip = None
+        view.render(currentTimeline, selectedClip)
+        syncVideoPreview()
 
-      currentTimeline = newTimeline
-      selectedClip = None
-      view.render(currentTimeline, selectedClip)
-      syncVideoPreview()
+      case None =>
+        val videoTrack = currentTimeline.videoTracks.find(_.id == 1).get
+        val clipIndexOpt = videoTrack.clips.indexWhere { c =>
+          currentTime >= c.startTime && currentTime < (c.startTime + c.duration)
+        }
+
+        if clipIndexOpt != -1 then
+          var newTimeline = TimelineEngine.removeVideoClip(currentTimeline, 1, clipIndexOpt)
+          newTimeline = TimelineEngine.removeAudioClip(newTimeline, 1, clipIndexOpt)
+
+          currentTimeline = newTimeline
+          view.render(currentTimeline, selectedClip)
+          syncVideoPreview()
   }
 
   view.onCutRequested = { cursorTime =>
-    val videoTrack = currentTimeline.videoTracks.find(_.id == 1).get
-    val clipIndexOpt = videoTrack.clips.indexWhere { c =>
-      cursorTime >= c.startTime && cursorTime < (c.startTime + c.duration)
-    }
+    selectedClip match
+      case Some((mediaType, trackId, clipIndex)) =>
+        val clipOpt = mediaType match
+          case "video" => currentTimeline.videoTracks.find(_.id == trackId).flatMap(_.clips.lift(clipIndex))
+          case "audio" => currentTimeline.audioTracks.find(_.id == trackId).flatMap(_.clips.lift(clipIndex))
+          case _       => None
 
-    if clipIndexOpt != -1 then
-      val targetClip = videoTrack.clips(clipIndexOpt)
-      val relativeCut = cursorTime - targetClip.startTime
+        clipOpt match
+          case Some(clip) if cursorTime >= clip.startTime && cursorTime < (clip.startTime + clip.duration) =>
+            val relativeCut = cursorTime - clip.startTime
+            currentTimeline = mediaType match
+              case "video" => TimelineEngine.cutVideoClip(currentTimeline, trackId, clipIndex, relativeCut)
+              case "audio" => TimelineEngine.cutAudioClip(currentTimeline, trackId, clipIndex, relativeCut)
+              case _       => currentTimeline
 
-      var newTimeline = TimelineEngine.cutVideoClip(currentTimeline, 1, clipIndexOpt, relativeCut)
-      newTimeline = TimelineEngine.cutAudioClip(newTimeline, 1, clipIndexOpt, relativeCut)
+            selectedClip = None
+            view.render(currentTimeline, selectedClip)
+            syncVideoPreview()
+          case _ => ()
 
-      currentTimeline = newTimeline
-      selectedClip = None
-      view.render(currentTimeline, selectedClip)
-      syncVideoPreview()
+      case None =>
+        val videoTrack = currentTimeline.videoTracks.find(_.id == 1).get
+        val clipIndexOpt = videoTrack.clips.indexWhere { c =>
+          cursorTime >= c.startTime && cursorTime < (c.startTime + c.duration)
+        }
+
+        if clipIndexOpt != -1 then
+          val targetClip = videoTrack.clips(clipIndexOpt)
+          val relativeCut = cursorTime - targetClip.startTime
+
+          var newTimeline = TimelineEngine.cutVideoClip(currentTimeline, 1, clipIndexOpt, relativeCut)
+          newTimeline = TimelineEngine.cutAudioClip(newTimeline, 1, clipIndexOpt, relativeCut)
+
+          currentTimeline = newTimeline
+          view.render(currentTimeline, selectedClip)
+          syncVideoPreview()
+  }
+
+  view.onSnapRequested = { () =>
+    selectedClip match
+      case Some((mediaType, trackId, _)) =>
+        currentTimeline = TimelineEngine.snapClipsTogether(currentTimeline, trackId)
+        selectedClip = None
+        view.render(currentTimeline, selectedClip)
+        syncVideoPreview()
+
+      case None =>
+        currentTimeline = TimelineEngine.snapClipsTogether(currentTimeline, 1)
+        view.render(currentTimeline, selectedClip)
+        syncVideoPreview()
   }
 
   view.onSnapRequested = { () =>

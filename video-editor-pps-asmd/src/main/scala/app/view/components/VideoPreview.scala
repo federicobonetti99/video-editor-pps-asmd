@@ -43,6 +43,9 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
               val jfxMedia = new javafx.scene.media.Media(url)
               val jfxPlayer = new javafx.scene.media.MediaPlayer(jfxMedia)
 
+              jfxPlayer.setVolume(0.0)
+              jfxPlayer.setMute(true)
+
               jfxMediaView.setMediaPlayer(jfxPlayer)
               activeJfxPlayer = Some(jfxPlayer)
               currentLoadedUrl = Some(url)
@@ -62,23 +65,23 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
 
           activeJfxPlayer.foreach {
             player =>
-            val targetTime = javafx.util.Duration.millis(relativeTimeSeconds * 1000.0)
+              val targetTime = javafx.util.Duration.millis(relativeTimeSeconds * 1000.0)
 
-            if isPlaying then
-              if !lastRequestedPlayingState.contains(true) then
-                lastRequestedPlayingState = Some(true)
-              player.seek(targetTime)
-              player.play()
-
-            else
-              if !lastRequestedPlayingState.contains(false) then
-                lastRequestedPlayingState = Some(false)
-                player.pause()
+              if isPlaying then
+                if !lastRequestedPlayingState.contains(true) then
+                  lastRequestedPlayingState = Some(true)
                 player.seek(targetTime)
+                player.play()
 
-              val diff = Math.abs(player.getCurrentTime.toSeconds - relativeTimeSeconds)
-              if diff > 0.15 then
-                player.seek(targetTime)
+              else
+                if !lastRequestedPlayingState.contains(false) then
+                  lastRequestedPlayingState = Some(false)
+                  player.pause()
+                  player.seek(targetTime)
+
+                val diff = Math.abs(player.getCurrentTime.toSeconds - relativeTimeSeconds)
+                if diff > 0.15 then
+                  player.seek(targetTime)
           }
 
         case None =>
