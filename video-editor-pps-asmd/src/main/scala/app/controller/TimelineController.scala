@@ -1,5 +1,6 @@
 package app.controller
 
+import app.utils.MediaImporter
 import scalafx.Includes.*
 import core.model.*
 import core.engine.*
@@ -8,8 +9,13 @@ import scalafx.scene.layout.VBox
 
 class TimelineController:
 
-  private val initialTrack = VideoTrack(id = 1, clips = Nil)
-  private var currentTimeline = Timeline(videoTracks = List(initialTrack), audioTracks = Nil)
+  private val initialVideoTrack = VideoTrack(id = 1, clips = Nil)
+  private val initialAudioTrack = AudioTrack(id = 1, clips = Nil)
+
+  private var currentTimeline = Timeline(
+    videoTracks = List(initialVideoTrack),
+    audioTracks = List(initialAudioTrack)
+  )
 
   private var currentTime: Double = 0.0
   private var currentPlayerState: PlayerState = Paused
@@ -35,23 +41,28 @@ class TimelineController:
 
 
   view.onImportRequested = { () =>
-    val currentWindow = view.getScene.getWindow
-    app.utils.MediaImporter.chooseVideoFile(currentWindow) match
-      case Some((file, durataReale)) =>
-        val fileUrl = file.toURI.toString
-        val importedClip = VideoClip(
-          sourceUrl = fileUrl,
-          sourceLength = durataReale,
-          startTime = currentTime,
-          trimStart = 0.0,
-          duration = durataReale,
-          effect = VideoEffect.None
-        )
-        currentTimeline = TimelineEngine.addVideoClip(currentTimeline, 1, importedClip)
-        view.render(currentTimeline)
-        syncVideoPreview()
-      case None =>
-        println("🟡 Selezione annullata.")
+    val window: scalafx.stage.Window = view.scene.value.window.value
+
+    MediaImporter.chooseVideoFile(window).foreach { (file, duration) =>
+      val importedVideo = VideoClip(
+        sourceUrl = file.toURI.toString, // <-- QUI: evita l'errore URISyntaxException con gli spazi e C:\
+        sourceLength = duration,
+        startTime = 0.0,
+        trimStart = 0.0,
+        duration = duration,
+        effect = VideoEffect.None
+      )
+
+      currentTimeline = TimelineEngine.importVideoWithAudio(
+        timeline = currentTimeline,
+        videoTrackId = 1,
+        audioTrackId = 1,
+        videoClip = importedVideo
+      )
+
+      view.render(currentTimeline)
+      syncVideoPreview()
+    }
   }
 
   view.onDeleteRequested = { () =>

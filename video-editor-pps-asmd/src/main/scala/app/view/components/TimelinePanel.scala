@@ -31,23 +31,17 @@ class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) 
     Platform.runLater {
       children.clear()
       children.add(playheadLine)
+      println(s"DEBUG DRAW - Video tracks: ${timeline.videoTracks.map(_.clips.size)} | Audio tracks: ${timeline.audioTracks.map(_.clips.size)}")
 
-      val separatorLine = new Line {
-        startX = 0
-        startY = 110
-        endX = 2000
-        endY = 110
-        stroke = Color.web("#7f8c8d")
-        strokeWidth = 1
-        strokeDashArray.addAll(5.0, 5.0)
-      }
-      children.add(separatorLine)
+      var currentY = 20.0
+      val trackSpacing = 10.0
 
+      // --- 1. TRACCE VIDEO ---
       timeline.videoTracks.foreach { track =>
         track.clips.foreach { videoClip =>
           val clipRectangle = new Rectangle {
             x = videoClip.startTime * pixelsPerSecond
-            y = 45
+            y = currentY
             width = videoClip.duration * pixelsPerSecond
             height = trackHeight
             fill = Color.DeepSkyBlue
@@ -60,20 +54,39 @@ class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) 
           val clipLabel = new Label {
             text = new File(videoClip.sourceUrl).getName
             layoutX = (videoClip.startTime * pixelsPerSecond) + 5
-            layoutY = 60
+            layoutY = currentY + 12
             style = "-fx-text-fill: black; -fx-font-weight: bold; -fx-font-size: 11px;"
             maxWidth = (videoClip.duration * pixelsPerSecond) - 10
           }
 
           children.addAll(clipRectangle, clipLabel)
         }
+        // AUMENTA LA Y PER LA PROSSIMA TRACCIA VIDEO
+        currentY += trackHeight + trackSpacing
       }
 
+      // --- LINEA DIVISORIA ---
+      val separatorY = currentY + 5.0
+      val separatorLine = new Line {
+        startX = 0;
+        startY = separatorY
+        endX = 2000;
+        endY = separatorY
+        stroke = Color.web("#7f8c8d")
+        strokeWidth = 1
+        strokeDashArray.addAll(5.0, 5.0)
+      }
+      children.add(separatorLine)
+
+      // SPOSTA LA Y SOTTO LA LINEA DIVISORIA PER L'AUDIO
+      currentY = separatorY + 15.0
+
+      // --- 2. TRACCE AUDIO ---
       timeline.audioTracks.foreach { track =>
         track.clips.foreach { audioClip =>
           val clipRectangle = new Rectangle {
             x = audioClip.startTime * pixelsPerSecond
-            y = 125
+            y = currentY // <-- IMPORTANTE: usa currentY aggiornata, non un numero fisso!
             width = audioClip.duration * pixelsPerSecond
             height = trackHeight
             fill = Color.LightGreen
@@ -86,13 +99,15 @@ class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) 
           val clipLabel = new Label {
             text = new File(audioClip.sourceUrl).getName
             layoutX = (audioClip.startTime * pixelsPerSecond) + 5
-            layoutY = 140
+            layoutY = currentY + 12
             style = "-fx-text-fill: black; -fx-font-weight: bold; -fx-font-size: 11px;"
             maxWidth = (audioClip.duration * pixelsPerSecond) - 10
           }
 
           children.addAll(clipRectangle, clipLabel)
         }
+        // AUMENTA LA Y PER LA PROSSIMA TRACCIA AUDIO
+        currentY += trackHeight + trackSpacing
       }
 
       updatePlayhead(currentCursorTime)
