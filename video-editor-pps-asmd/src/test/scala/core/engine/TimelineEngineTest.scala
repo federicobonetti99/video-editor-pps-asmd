@@ -153,3 +153,61 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     assert(secondPart.startTime == 10.0, s"Expected second part to shift to 10.0, but was at ${secondPart.startTime}")
     assert(secondPart.duration == 5.0)
   }
+
+  test("Automatically create and add an audio clip when a video clip is imported (Strada A)") {
+    val videoTrack = VideoTrack(id = 1, clips = Nil)
+    val audioTrack = AudioTrack(id = 1, clips = Nil)
+    val emptyTimeline = Timeline(videoTracks = List(videoTrack), audioTracks = List(audioTrack))
+
+    val importedVideo = VideoClip(
+      sourceUrl = "file_con_audio.mp4",
+      sourceLength = 12.0,
+      startTime = 0.0,
+      trimStart = 0.0,
+      duration = 12.0,
+      effect = VideoEffect.None
+    )
+
+    val updatedTimeline = TimelineEngine.importVideoWithAudio(emptyTimeline, videoTrackId = 1, audioTrackId = 1, videoClip = importedVideo)
+
+    val finalVideoClips = updatedTimeline.videoTracks.find(_.id == 1).get.clips
+    finalVideoClips should have size 1
+    finalVideoClips.head shouldBe importedVideo
+
+    val finalAudioClips = updatedTimeline.audioTracks.find(_.id == 1).get.clips
+    finalAudioClips should have size 1
+
+    val generatedAudio = finalAudioClips.head
+    generatedAudio.sourceUrl shouldBe "file_con_audio.mp4"
+    generatedAudio.startTime shouldBe 0.0
+    generatedAudio.duration shouldBe 12.0
+    generatedAudio.trimStart shouldBe 0.0
+  }
+
+  test("Ensure that cutting a video clip also cuts the synchronized audio clip") {
+    val videoTrack = VideoTrack(id = 1, clips = List(sampleClip))
+    val audioClip = AudioClip(
+      sourceUrl = "video1.mp4",
+      sourceLength = 10.0,
+      startTime = 0.0,
+      trimStart = 0.0,
+      duration = 10.0,
+      volumePoints = List.empty
+    )
+
+    val audioTrack = AudioTrack(id = 1, clips = List(audioClip))
+    val timeline = Timeline(videoTracks = List(videoTrack), audioTracks = List(audioTrack))
+
+    val updatedTimeline = TimelineEngine.cutVideoAndAudio(timeline, videoTrackId = 1, audioTrackId = 1, clipIndex = 0, relativeCutTime = 4.0)
+
+    val finalVideoClips = updatedTimeline.videoTracks.find(_.id == 1).get.clips
+    finalVideoClips should have size 2
+    finalVideoClips(0).duration shouldBe 4.0
+    finalVideoClips(1).duration shouldBe 6.0
+
+    val finalAudioClips = updatedTimeline.audioTracks.find(_.id == 1).get.clips
+    finalAudioClips should have size 2
+    finalAudioClips(0).duration shouldBe 4.0
+    finalAudioClips(1).duration shouldBe 6.0
+    finalAudioClips(1).trimStart shouldBe 4.0
+  }
