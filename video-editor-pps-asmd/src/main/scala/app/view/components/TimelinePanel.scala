@@ -36,7 +36,6 @@ class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) 
       var currentY = 20.0
       val trackSpacing = 10.0
 
-      // --- 1. TRACCE VIDEO ---
       timeline.videoTracks.foreach { track =>
         track.clips.foreach { videoClip =>
           val clipRectangle = new Rectangle {
@@ -61,11 +60,9 @@ class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) 
 
           children.addAll(clipRectangle, clipLabel)
         }
-        // AUMENTA LA Y PER LA PROSSIMA TRACCIA VIDEO
         currentY += trackHeight + trackSpacing
       }
 
-      // --- LINEA DIVISORIA ---
       val separatorY = currentY + 5.0
       val separatorLine = new Line {
         startX = 0;
@@ -78,15 +75,13 @@ class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) 
       }
       children.add(separatorLine)
 
-      // SPOSTA LA Y SOTTO LA LINEA DIVISORIA PER L'AUDIO
       currentY = separatorY + 15.0
 
-      // --- 2. TRACCE AUDIO ---
       timeline.audioTracks.foreach { track =>
         track.clips.foreach { audioClip =>
           val clipRectangle = new Rectangle {
             x = audioClip.startTime * pixelsPerSecond
-            y = currentY // <-- IMPORTANTE: usa currentY aggiornata, non un numero fisso!
+            y = currentY
             width = audioClip.duration * pixelsPerSecond
             height = trackHeight
             fill = Color.LightGreen
@@ -106,7 +101,6 @@ class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) 
 
           children.addAll(clipRectangle, clipLabel)
         }
-        // AUMENTA LA Y PER LA PROSSIMA TRACCIA AUDIO
         currentY += trackHeight + trackSpacing
       }
 
