@@ -211,3 +211,44 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     finalAudioClips(1).duration shouldBe 6.0
     finalAudioClips(1).trimStart shouldBe 4.0
   }
+
+  test("Move a video clip to a new start time") {
+    val timelineWithClip = TimelineEngine.addVideoClip(initialTimeline, trackId = 1, clip = sampleClip)
+    val updatedTimeline = TimelineEngine.moveVideoClip(timelineWithClip, trackId = 1, clipIndex = 0, newStartTime = 8.0)
+
+    val updatedVideoClip = updatedTimeline.videoTracks.head.clips.head
+    updatedVideoClip.startTime shouldBe 8.0
+  }
+
+  test("Moving a video clip must NOT affect the corresponding audio clip (Decoupling)") {
+    val audioClip = AudioClip("video1.mp4", sourceLength = 10.0, startTime = 0.0, trimStart = 0.0, duration = 10.0, volumePoints = List.empty)
+    val timelineWithBoth = Timeline(
+      videoTracks = List(VideoTrack(id = 1, clips = List(sampleClip))),
+      audioTracks = List(AudioTrack(id = 1, clips = List(audioClip)))
+    )
+
+    val updatedTimeline = TimelineEngine.moveVideoClip(timelineWithBoth, trackId = 1, clipIndex = 0, newStartTime = 15.0)
+
+    updatedTimeline.videoTracks.head.clips.head.startTime shouldBe 15.0
+    updatedTimeline.audioTracks.head.clips.head.startTime shouldBe 0.0
+  }
+
+  test("Move an audio clip independently from its video clip") {
+    val audioClip = AudioClip("video1.mp4", sourceLength = 10.0, startTime = 0.0, trimStart = 0.0, duration = 10.0, volumePoints = List.empty)
+    val timelineWithBoth = Timeline(
+      videoTracks = List(VideoTrack(id = 1, clips = List(sampleClip))),
+      audioTracks = List(AudioTrack(id = 1, clips = List(audioClip)))
+    )
+
+    val updatedTimeline = TimelineEngine.moveAudioClip(timelineWithBoth, trackId = 1, clipIndex = 0, newStartTime = 6.0)
+
+    updatedTimeline.audioTracks.head.clips.head.startTime shouldBe 6.0
+    updatedTimeline.videoTracks.head.clips.head.startTime shouldBe 0.0
+  }
+
+  test("Clamp negative start times to 0.0 when moving clips to prevent invalid states") {
+    val timelineWithClip = TimelineEngine.addVideoClip(initialTimeline, trackId = 1, clip = sampleClip)
+    val updatedTimeline = TimelineEngine.moveVideoClip(timelineWithClip, trackId = 1, clipIndex = 0, newStartTime = -5.0)
+
+    updatedTimeline.videoTracks.head.clips.head.startTime shouldBe 0.0
+  }

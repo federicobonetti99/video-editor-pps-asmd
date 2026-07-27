@@ -193,6 +193,28 @@ object TimelineEngine:
 
     (newClip :: processedClips).sortBy(_.startTime)
 
+  def moveVideoClip(timeline: Timeline, trackId: Int, clipIndex: Int, newStartTime: Double): Timeline =
+    val clampedStartTime = Math.max(0.0, newStartTime)
+    timeline.copy(
+      videoTracks = timeline.videoTracks.map { track =>
+        if track.id == trackId && track.clips.isDefinedAt(clipIndex) then
+          val updatedClips = track.clips.updated(clipIndex, track.clips(clipIndex).copy(startTime = clampedStartTime))
+          track.copy(clips = updatedClips)
+        else track
+      }
+    )
+
+  def moveAudioClip(timeline: Timeline, trackId: Int, clipIndex: Int, newStartTime: Double): Timeline =
+    val clampedStartTime = Math.max(0.0, newStartTime)
+    timeline.copy(
+      audioTracks = timeline.audioTracks.map { track =>
+        if track.id == trackId && track.clips.isDefinedAt(clipIndex) then
+          val updatedClips = track.clips.updated(clipIndex, track.clips(clipIndex).copy(startTime = clampedStartTime))
+          track.copy(clips = updatedClips)
+        else track
+      }
+    )
+
   private def resolveOverwrite[C <: MediaClip](existingClips: List[C], newClip: C): List[C] =
     (newClip :: existingClips).sortBy(_.startTime)
 
