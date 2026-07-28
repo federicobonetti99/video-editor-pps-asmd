@@ -25,19 +25,25 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
 
   private var activeJfxPlayer: Option[javafx.scene.media.MediaPlayer] = None
   private var currentLoadedUrl: Option[String] = None
-  private var lastRequestedPlayingState: Option[Boolean] = None
+  private var isSeekingOrLoading: Boolean = false
 
   def update(videoUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean, onTimeUpdated: Double => Unit): Unit =
     Platform.runLater {
       videoUrlOpt match
         case Some(url) =>
+          val targetTime = javafx.util.Duration.seconds(relativeTimeSeconds)
+
           if !currentLoadedUrl.contains(url) then
+            isSeekingOrLoading = true
+
             activeJfxPlayer.foreach { p =>
+              p.setOnEndOfMedia(null)
               p.stop()
               p.dispose()
             }
             activeJfxPlayer = None
-            lastRequestedPlayingState = None
+            jfxMediaView.setMediaPlayer(null)
+            currentLoadedUrl = Some(url)
 
             try {
               val jfxMedia = new javafx.scene.media.Media(url)
@@ -45,47 +51,55 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
 
               jfxMediaView.setMediaPlayer(jfxPlayer)
               activeJfxPlayer = Some(jfxPlayer)
-              currentLoadedUrl = Some(url)
-
-              jfxPlayer.setOnReady(() => {
-                jfxPlayer.seek(javafx.util.Duration.millis(relativeTimeSeconds * 1000.0))
-              })
 
               jfxPlayer.currentTimeProperty().addListener { (_, _, newTime) =>
-                if jfxPlayer.getStatus == javafx.scene.media.MediaPlayer.Status.PLAYING then
+                if !isSeekingOrLoading && jfxPlayer.getStatus == javafx.scene.media.MediaPlayer.Status.PLAYING then
                   onTimeUpdated(newTime.toSeconds)
               }
 
+              jfxPlayer.setOnReady(() => {
+                jfxPlayer.seek(targetTime)
+                Platform.runLater {
+                  isSeekingOrLoading = false
+                  if isPlaying then jfxPlayer.play()
+                  else jfxPlayer.pause()
+                }
+              })
+
+              jfxPlayer.setOnEndOfMedia(() => {
+                val duration = jfxMedia.getDuration
+                if duration != null && !duration.isUnknown then
+                  onTimeUpdated(duration.toSeconds)
+              })
+
             } catch {
-              case e: Exception => println(s"❌ Errore caricamento video: ${e.getMessage}")
+              case e: Exception =>
+                isSeekingOrLoading = false
+                println(s"❌ Errore caricamento video: ${e.getMessage}")
             }
 
-          activeJfxPlayer.foreach {
-            player =>
-            val targetTime = javafx.util.Duration.millis(relativeTimeSeconds * 1000.0)
+          else
+            activeJfxPlayer.foreach { player =>
+              if !isSeekingOrLoading then
+                val status = player.getStatus
 
-            if isPlaying then
-              if !lastRequestedPlayingState.contains(true) then
-                lastRequestedPlayingState = Some(true)
-              player.seek(targetTime)
-              player.play()
+                if isPlaying then
+                  if status != javafx.scene.media.MediaPlayer.Status.PLAYING then player.play()
+                  else
+                    if status == javafx.scene.media.MediaPlayer.Status.PLAYING then player.pause()
 
-            else
-              if !lastRequestedPlayingState.contains(false) then
-                lastRequestedPlayingState = Some(false)
-                player.pause()
-                player.seek(targetTime)
-
-              val diff = Math.abs(player.getCurrentTime.toSeconds - relativeTimeSeconds)
-              if diff > 0.15 then
-                player.seek(targetTime)
-          }
+                val diff = Math.abs(player.getCurrentTime.toSeconds - relativeTimeSeconds)
+                if diff > 0.2 then
+                  player.seek(targetTime)
+            }
 
         case None =>
-          activeJfxPlayer.foreach { player =>
-            if !lastRequestedPlayingState.contains(false) then
-              lastRequestedPlayingState = Some(false)
-              player.pause()
-            player.seek(javafx.util.Duration.ZERO)
+          isSeekingOrLoading = false
+          activeJfxPlayer.foreach { p =>
+            p.stop()
+            p.dispose()
           }
+          activeJfxPlayer = None
+          currentLoadedUrl = None
+          jfxMediaView.setMediaPlayer(null)
     }

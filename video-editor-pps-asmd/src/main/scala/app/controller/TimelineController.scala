@@ -8,14 +8,18 @@ import scalafx.scene.layout.VBox
 
 class TimelineController:
 
-  private val initialTrack = VideoTrack(id = 1, clips = Nil)
-  private var currentTimeline = Timeline(videoTracks = List(initialTrack), audioTracks = Nil)
+  private val initialVideoTrack = VideoTrack(id = 1, clips = Nil)
+  private val initialAudioTrack = AudioTrack(id = 1, clips = Nil)
+
+  private var currentTimeline = Timeline(
+    videoTracks = List(initialVideoTrack),
+    audioTracks = List(initialAudioTrack)
+  )
 
   private var currentTime: Double = 0.0
   private var currentPlayerState: PlayerState = Paused
 
   private val view = new TimelineView()
-  private val inputHandler = new InputHandler(onTogglePlayback = view.onTogglePlaybackRequested)
 
   private def getActiveClip(): Option[VideoClip] =
     currentTimeline.videoTracks
@@ -28,17 +32,24 @@ class TimelineController:
         val relativeTime = (currentTime - clip.startTime) + clip.trimStart
         val isPlaying = currentPlayerState match
           case Playing(_) => true
-          case Paused => false
+          case Paused     => false
         view.updatePreview(Some(clip.sourceUrl), relativeTime, isPlaying)
       case None =>
         view.updatePreview(None, 0.0, false)
 
+  private val inputHandler = new InputHandler(onTogglePlayback = () => {
+    currentPlayerState = currentPlayerState match
+      case Paused     => Playing(speed = 1.0)
+      case Playing(_) => Paused
+    syncVideoPreview()
+  })
 
   view.onImportRequested = { () =>
     val currentWindow = view.getScene.getWindow
     app.utils.MediaImporter.chooseVideoFile(currentWindow) match
       case Some((file, durataReale)) =>
         val fileUrl = file.toURI.toString
+
         val importedClip = VideoClip(
           sourceUrl = fileUrl,
           sourceLength = durataReale,
@@ -47,7 +58,14 @@ class TimelineController:
           duration = durataReale,
           effect = VideoEffect.None
         )
-        currentTimeline = TimelineEngine.addVideoClip(currentTimeline, 1, importedClip)
+
+        currentTimeline = TimelineEngine.importVideoWithAudio(
+          timeline = currentTimeline,
+          videoTrackId = 1,
+          audioTrackId = 1,
+          videoClip = importedClip
+        )
+
         view.render(currentTimeline)
         syncVideoPreview()
       case None =>
@@ -96,37 +114,29 @@ class TimelineController:
   view.onVideoTimeUpdated = { newVideoTime =>
     val previousClip = getActiveClip()
 
-    previousClip match
-      case Some(clip) =>
-        currentTime = clip.startTime + newVideoTime - clip.trimStart
+    previousClip.foreach { clip =>
+      val calculatedTime = clip.startTime + (newVideoTime - clip.trimStart)
+
+      if calculatedTime >= currentTime then
+        currentTime = calculatedTime
         view.updateTimelineTime(currentTime)
-      case None => ()
+    }
 
     val currentClip = getActiveClip()
 
     if previousClip != currentClip then
       currentClip match
         case Some(newClip) =>
-          val relativeTime = (currentTime - newClip.startTime) + newClip.trimStart
-
-          println(s"🎬 Taglio rilevato! Passaggio a: ${newClip.sourceUrl} al secondo: $relativeTime")
-
-          val isPlaying = currentPlayerState match
-            case Playing(_) => true
-            case Paused => false
-
-          view.updatePreview(Some(newClip.sourceUrl), relativeTime, isPlaying)
-
+          println(s"🎬 Passaggio a clip successiva: ${newClip.sourceUrl}")
+          syncVideoPreview()
         case None =>
           view.updatePreview(None, 0.0, false)
   }
 
   view.onTogglePlaybackRequested = { () =>
     currentPlayerState = currentPlayerState match
-      case Paused =>
-        Playing(speed = 1.0)
-      case Playing(_) =>
-        Paused
+      case Paused     => Playing(speed = 1.0)
+      case Playing(_) => Paused
     syncVideoPreview()
   }
 
