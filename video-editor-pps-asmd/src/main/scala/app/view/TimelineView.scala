@@ -1,5 +1,6 @@
 package app.view
 
+import scalafx.Includes.*
 import scalafx.application.Platform
 import scalafx.scene.control.Slider
 import scalafx.scene.layout.VBox
