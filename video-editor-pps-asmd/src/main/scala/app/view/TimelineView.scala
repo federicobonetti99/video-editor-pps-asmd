@@ -1,6 +1,5 @@
 package app.view
 
-import scalafx.Includes.*
 import scalafx.application.Platform
 import scalafx.scene.control.Slider
 import scalafx.scene.layout.VBox
@@ -20,10 +19,21 @@ class TimelineView extends VBox:
   var onTimeChanged: Double => Unit = _ => ()
   var onImportRequested: () => Unit = () => ()
   var onVideoTimeUpdated: Double => Unit = _ => ()
+  var onClipSelected: Option[SelectedClip] => Unit = _ => ()
 
-  // 1. DICHIARIAMO PRIMA TUTTI I COMPONENTI INDIPENDENTI
+  private var selectedClipOpt: Option[SelectedClip] = None
+  private var currentTimelineRef: Option[Timeline] = None
+
   private val preview = new VideoPreview(480.0, 270.0)
   private val timelinePanel = new TimelinePanel()
+
+  timelinePanel.onVideoClipClicked = { clip =>
+    toggleVideoSelection(clip)
+  }
+
+  timelinePanel.onAudioClipClicked = { clip =>
+    toggleAudioSelection(clip)
+  }
 
   private val timeSlider = new Slider {
     min = 0.0
@@ -52,6 +62,33 @@ class TimelineView extends VBox:
       onTimeChanged(seconds)
   }
 
+  def getSelectedClip: Option[SelectedClip] = selectedClipOpt
+
+  def selectClip(targetOpt: Option[SelectedClip]): Unit =
+    selectedClipOpt = targetOpt
+    onClipSelected(selectedClipOpt)
+    currentTimelineRef.foreach(render)
+
+  def toggleVideoSelection(clip: VideoClip): Unit =
+    val isAlreadySelected = selectedClipOpt.exists {
+      case SelectedClip.SelectedVideo(v) => v.sourceUrl == clip.sourceUrl && Math.abs(v.startTime - clip.startTime) < 0.001
+      case _ => false
+    }
+    if isAlreadySelected then
+      selectClip(None)
+    else
+      selectClip(Some(SelectedClip.SelectedVideo(clip)))
+
+  def toggleAudioSelection(clip: AudioClip): Unit =
+    val isAlreadySelected = selectedClipOpt.exists {
+      case SelectedClip.SelectedAudio(a) => a.sourceUrl == clip.sourceUrl && Math.abs(a.startTime - clip.startTime) < 0.001
+      case _ => false
+    }
+    if isAlreadySelected then
+      selectClip(None)
+    else
+      selectClip(Some(SelectedClip.SelectedAudio(clip)))
+
   def updateTimelineTime(seconds: Double): Unit =
     Platform.runLater { timeSlider.value = seconds }
 
@@ -59,4 +96,5 @@ class TimelineView extends VBox:
     preview.update(videoUrlOpt, relativeTimeSeconds, isPlaying, onVideoTimeUpdated)
 
   def render(timeline: Timeline): Unit =
-    timelinePanel.draw(timeline, timeSlider.value.value)
+    currentTimelineRef = Some(timeline)
+    timelinePanel.draw(timeline, timeSlider.value.value, selectedClipOpt)
