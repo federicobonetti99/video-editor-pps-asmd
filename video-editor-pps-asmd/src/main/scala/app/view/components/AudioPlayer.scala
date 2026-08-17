@@ -1,69 +1,64 @@
 package app.view.components
 
 import scalafx.application.Platform
+import java.util.concurrent.atomic.AtomicReference
+
+private case class AudioInternalState(
+                                       player: Option[javafx.scene.media.MediaPlayer] = None,
+                                       loadedUrl: Option[String] = None,
+                                       isSeekingOrLoading: Boolean = false
+                                     )
 
 class AudioPlayer:
 
-  private var activeJfxPlayer: Option[javafx.scene.media.MediaPlayer] = None
-  private var currentLoadedUrl: Option[String] = None
-  private var isSeekingOrLoading: Boolean = false
+  private val state = new AtomicReference[AudioInternalState](AudioInternalState())
 
   def update(audioUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
-    Platform.runLater {
+    Platform.runLater:
+      val currentState = state.get()
       audioUrlOpt match
         case Some(url) =>
           val targetTime = javafx.util.Duration.seconds(relativeTimeSeconds)
 
-          if !currentLoadedUrl.contains(url) then
-            isSeekingOrLoading = true
-
-            activeJfxPlayer.foreach { p =>
+          if !currentState.loadedUrl.contains(url) then
+            currentState.player.foreach: p =>
               p.stop()
               p.dispose()
-            }
-            activeJfxPlayer = None
-            currentLoadedUrl = Some(url)
 
-            try {
+            state.set(AudioInternalState(loadedUrl = Some(url), isSeekingOrLoading = true))
+
+            try
               val jfxMedia = new javafx.scene.media.Media(url)
               val jfxPlayer = new javafx.scene.media.MediaPlayer(jfxMedia)
-              activeJfxPlayer = Some(jfxPlayer)
+              state.set(AudioInternalState(player = Some(jfxPlayer), loadedUrl = Some(url), isSeekingOrLoading = true))
 
-              jfxPlayer.setOnReady(() => {
+              jfxPlayer.setOnReady(() =>
                 jfxPlayer.seek(targetTime)
-                Platform.runLater {
-                  isSeekingOrLoading = false
+                Platform.runLater:
+                  state.set(AudioInternalState(player = Some(jfxPlayer), loadedUrl = Some(url), isSeekingOrLoading = false))
                   if isPlaying then jfxPlayer.play()
                   else jfxPlayer.pause()
-                }
-              })
-
-            } catch {
-              case e: Exception =>
-                isSeekingOrLoading = false
-            }
+              )
+            catch
+              case _: Exception =>
+                state.set(AudioInternalState(loadedUrl = Some(url), isSeekingOrLoading = false))
 
           else
-            activeJfxPlayer.foreach { player =>
-              if !isSeekingOrLoading then
-                val status = player.getStatus
+            currentState.player.foreach: player =>
+              if isPlaying then
+                if player.getStatus != javafx.scene.media.MediaPlayer.Status.PLAYING then
+                  player.play()
+              else
+                if player.getStatus == javafx.scene.media.MediaPlayer.Status.PLAYING then
+                  player.pause()
 
-                if isPlaying then
-                  if status != javafx.scene.media.MediaPlayer.Status.PLAYING then player.play()
-                  else
-                    if status == javafx.scene.media.MediaPlayer.Status.PLAYING then player.pause()
-
+              if !currentState.isSeekingOrLoading then
                 val diff = Math.abs(player.getCurrentTime.toSeconds - relativeTimeSeconds)
                 if diff > 0.2 then
                   player.seek(targetTime)
-            }
 
         case None =>
-          isSeekingOrLoading = false
-          activeJfxPlayer.foreach { p =>
+          currentState.player.foreach: p =>
             p.stop()
             p.dispose()
-          }
-          activeJfxPlayer = None
-          currentLoadedUrl = None
-    }
+          state.set(AudioInternalState())

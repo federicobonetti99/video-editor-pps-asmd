@@ -38,6 +38,7 @@ class TimelineView extends VBox:
     value = 0.0
     prefWidth = 600
     maxWidth = 800
+    focusTraversable = false
 
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
@@ -53,9 +54,11 @@ class TimelineView extends VBox:
     val seconds = newValue.doubleValue()
     toolbar.updateTimeLabel(seconds)
     timelinePanel.updatePlayhead(seconds)
-
-    if timeSlider.isFocused then
+    if timeSlider.isValueChanging then
       onTimeChanged(seconds)
+
+  timeSlider.onMouseClicked = _ =>
+    onTimeChanged(timeSlider.value.value)
 
   def getSelectedClip: Option[SelectedClip] = selectedClipOpt
 
