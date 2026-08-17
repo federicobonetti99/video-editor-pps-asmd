@@ -27,10 +27,10 @@ class TimelineView extends VBox:
 
   private val preview = new VideoPreview(480.0, 270.0)
   private val audioPlayer = new AudioPlayer()
-  private val timelinePanel = new TimelinePanel()
-
-  timelinePanel.onVideoClipClicked = clip => toggleVideoSelection(clip)
-  timelinePanel.onAudioClipClicked = clip => toggleAudioSelection(clip)
+  private val timelinePanel = new TimelinePanel(
+    onVideoClipClicked = clip => toggleVideoSelection(clip),
+    onAudioClipClicked = clip => toggleAudioSelection(clip)
+  )
 
   private val timeSlider = new Slider:
     min = 0.0

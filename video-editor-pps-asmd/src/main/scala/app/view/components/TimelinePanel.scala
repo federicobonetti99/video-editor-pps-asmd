@@ -14,16 +14,16 @@ enum SelectedClip:
   case SelectedVideo(clip: VideoClip)
   case SelectedAudio(clip: AudioClip)
 
-class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) extends Pane:
+class TimelinePanel(
+                     pixelsPerSecond: Double = 20.0,
+                     trackHeight: Double = 50.0,
+                     val onVideoClipClicked: VideoClip => Unit = _ => (),
+                     val onAudioClipClicked: AudioClip => Unit = _ => ()
+                   ) extends Pane:
 
   minHeight = 200
   prefWidth = 600
   style = "-fx-background-color: #2c3e50; -fx-border-color: #7f8c8d; -fx-border-width: 2;"
-
-  var onVideoClipClicked: VideoClip => Unit = _ => ()
-  var onAudioClipClicked: AudioClip => Unit = _ => ()
-
-  private var selectedClipOpt: Option[SelectedClip] = None
 
   private val playheadLine = new Line:
     startY = 0
@@ -72,44 +72,36 @@ class TimelinePanel(pixelsPerSecond: Double = 20.0, trackHeight: Double = 50.0) 
 
   def draw(timeline: Timeline, currentCursorTime: Double, selectedClip: Option[SelectedClip] = None): Unit =
     Platform.runLater:
-      children.clear()
-      children.add(playheadLine)
-      selectedClipOpt = selectedClip
-
-      var currentY = 20.0
+      val baseVideoY = 20.0
       val trackSpacing = 10.0
 
-      timeline.videoTracks.foreach: track =>
-        track.clips.foreach: videoClip =>
-          val isSelected = selectedClipOpt.exists:
+      val videoNodes = timeline.videoTracks.zipWithIndex.flatMap: (track, trackIndex) =>
+        val trackY = baseVideoY + trackIndex * (trackHeight + trackSpacing)
+        track.clips.flatMap: videoClip =>
+          val isSelected = selectedClip.exists:
             case SelectedClip.SelectedVideo(v) => videoClip.isSameAs(v)
             case _                             => false
+          renderClipNodes(videoClip, trackY, Color.DeepSkyBlue, isSelected, onVideoClipClicked)
 
-          val nodes = renderClipNodes(videoClip, currentY, Color.DeepSkyBlue, isSelected, onVideoClipClicked)
-          nodes.foreach(children.add(_))
-        currentY += trackHeight + trackSpacing
-
-      val separatorY = currentY + 5.0
+      val videoSectionHeight = baseVideoY + timeline.videoTracks.size * (trackHeight + trackSpacing)
+      val separatorYPos = videoSectionHeight + 5.0
       val separatorLine = new Line:
         startX = 0
-        startY = separatorY
+        startY = separatorYPos
         endX = 2000
-        endY = separatorY
+        endY = separatorYPos
         stroke = Color.web("#7f8c8d")
         strokeWidth = 1
         strokeDashArray.addAll(5.0, 5.0)
-      children.add(separatorLine)
 
-      currentY = separatorY + 15.0
-
-      timeline.audioTracks.foreach: track =>
-        track.clips.foreach: audioClip =>
-          val isSelected = selectedClipOpt.exists:
+      val baseAudioY = separatorYPos + 15.0
+      val audioNodes = timeline.audioTracks.zipWithIndex.flatMap: (track, trackIndex) =>
+        val trackY = baseAudioY + trackIndex * (trackHeight + trackSpacing)
+        track.clips.flatMap: audioClip =>
+          val isSelected = selectedClip.exists:
             case SelectedClip.SelectedAudio(a) => audioClip.isSameAs(a)
             case _                             => false
+          renderClipNodes(audioClip, trackY, Color.LightGreen, isSelected, onAudioClipClicked)
 
-          val nodes = renderClipNodes(audioClip, currentY, Color.LightGreen, isSelected, onAudioClipClicked)
-          nodes.foreach(children.add(_))
-        currentY += trackHeight + trackSpacing
-
+      children = Seq(playheadLine) ++ videoNodes ++ Seq(separatorLine) ++ audioNodes
       updatePlayhead(currentCursorTime)

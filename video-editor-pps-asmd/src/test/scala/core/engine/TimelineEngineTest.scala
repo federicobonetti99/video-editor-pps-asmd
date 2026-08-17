@@ -211,3 +211,40 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     finalAudioClips(1).duration shouldBe 6.0
     finalAudioClips(1).trimStart shouldBe 4.0
   }
+
+  test("Snap clips together on both video and audio tracks simultaneously") {
+    val videoClip1 = VideoClip("v1.mp4", startTime = 0.0, trimStart = 0.0, duration = 4.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val videoClip2 = VideoClip("v2.mp4", startTime = 10.0, trimStart = 0.0, duration = 5.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val videoTrack = VideoTrack(id = 1, clips = List(videoClip1, videoClip2))
+
+    val audioClip1 = AudioClip("a1.mp3", startTime = 0.0, trimStart = 0.0, duration = 3.0, sourceLength = 10.0, volumePoints = Nil)
+    val audioClip2 = AudioClip("a2.mp3", startTime = 12.0, trimStart = 0.0, duration = 6.0, sourceLength = 10.0, volumePoints = Nil)
+    val audioTrack = AudioTrack(id = 1, clips = List(audioClip1, audioClip2))
+
+    val timeline = Timeline(videoTracks = List(videoTrack), audioTracks = List(audioTrack))
+    val updatedTimeline = TimelineEngine.snapAllTracks(timeline, videoTrackId = 1, audioTrackId = 1)
+
+    val snappedVideoClips = updatedTimeline.videoTracks.head.clips
+    snappedVideoClips(0).startTime shouldBe 0.0
+    snappedVideoClips(1).startTime shouldBe 4.0
+
+    val snappedAudioClips = updatedTimeline.audioTracks.head.clips
+    snappedAudioClips(0).startTime shouldBe 0.0
+    snappedAudioClips(1).startTime shouldBe 3.0
+  }
+
+  test("Snap must sort clips by time before snapping to prevent gaps when clips are out of list order") {
+    val disorderedAudio1 = AudioClip("a1.mp3", startTime = 15.0, trimStart = 0.0, duration = 5.0, sourceLength = 20.0, volumePoints = Nil)
+    val disorderedAudio2 = AudioClip("a2.mp3", startTime = 2.0, trimStart = 0.0, duration = 4.0, sourceLength = 20.0, volumePoints = Nil)
+
+    val track = AudioTrack(id = 1, clips = List(disorderedAudio1, disorderedAudio2))
+    val timeline = Timeline(videoTracks = Nil, audioTracks = List(track))
+
+    val updatedTimeline = TimelineEngine.snapAudioClips(timeline, trackId = 1)
+    val snappedClips = updatedTimeline.audioTracks.head.clips
+
+    snappedClips(0).startTime shouldBe 0.0
+    snappedClips(0).sourceUrl shouldBe "a2.mp3"
+    snappedClips(1).startTime shouldBe 4.0
+    snappedClips(1).sourceUrl shouldBe "a1.mp3"
+  }

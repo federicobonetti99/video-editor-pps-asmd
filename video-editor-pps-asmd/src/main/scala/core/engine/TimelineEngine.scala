@@ -139,7 +139,7 @@ object TimelineEngine:
       clips
 
   private def snapClipsGeneric[C <: MediaClip](clips: List[C]): List[C] =
-    clips.foldLeft(List.empty[C]) { (accumulated, currentClip) =>
+    clips.sortBy(_.startTime).foldLeft(List.empty[C]): (accumulated, currentClip) =>
       accumulated.lastOption match
         case Some(lastClip) =>
           val nextStartTime = lastClip.startTime + lastClip.duration
@@ -154,7 +154,6 @@ object TimelineEngine:
             newTrimStart = currentClip.trimStart,
             newDuration = currentClip.duration
           ).asInstanceOf[C]
-    }
 
   private def resolveInsertAndShift[C <: MediaClip](existingClips: List[C], newClip: C): List[C] =
     val insertTime = newClip.startTime
