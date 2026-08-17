@@ -22,24 +22,39 @@ class TimelineController:
 
   private val view = new TimelineView()
 
-  private def getActiveClip(): Option[VideoClip] =
+  private def getActiveVideoClip(): Option[VideoClip] =
     currentTimeline.videoTracks
       .flatMap(_.clips)
       .find(c => currentTime >= c.startTime && currentTime < (c.startTime + c.duration))
 
-  private def syncVideoPreview(): Unit =
-    getActiveClip() match
+  private def getActiveAudioClip(): Option[AudioClip] =
+    currentTimeline.audioTracks
+      .flatMap(_.clips)
+      .find(c => currentTime >= c.startTime && currentTime < (c.startTime + c.duration))
+
+  private def syncMediaPlayback(): Unit =
+    val isPlaying = currentPlayerState match
+      case Playing(_) => true
+      case Paused     => false
+
+    getActiveVideoClip() match
       case Some(clip) =>
         val relativeTime = (currentTime - clip.startTime) + clip.trimStart
-        val isPlaying = currentPlayerState match
-          case Playing(_) => true
-          case Paused     => false
         view.updatePreview(Some(clip.sourceUrl), relativeTime, isPlaying)
       case None =>
         view.updatePreview(None, 0.0, false)
 
+    getActiveAudioClip() match
+      case Some(clip) =>
+        val relativeTime = (currentTime - clip.startTime) + clip.trimStart
+        view.updateAudio(Some(clip.sourceUrl), relativeTime, isPlaying)
+      case None =>
+        view.updateAudio(None, 0.0, false)
+
   private def totalTimelineDuration: Double =
-    currentTimeline.videoTracks.flatMap(_.clips).map(c => c.startTime + c.duration).maxOption.getOrElse(0.0)
+    val maxVideo = currentTimeline.videoTracks.flatMap(_.clips).map(c => c.startTime + c.duration).maxOption.getOrElse(0.0)
+    val maxAudio = currentTimeline.audioTracks.flatMap(_.clips).map(c => c.startTime + c.duration).maxOption.getOrElse(0.0)
+    Math.max(maxVideo, maxAudio)
 
   private val inputHandler = new InputHandler(onTogglePlayback = () => {
     if currentTime >= totalTimelineDuration && totalTimelineDuration > 0 then
@@ -49,76 +64,67 @@ class TimelineController:
     currentPlayerState = currentPlayerState match
       case Paused     => Playing(speed = 1.0)
       case Playing(_) => Paused
-    syncVideoPreview()
+    syncMediaPlayback()
   })
 
-  view.onClipSelected = { clipOpt =>
-    clipOpt match
-      case Some(SelectedClip.SelectedVideo(clip)) => println(s"🎯 Video selezionato: ${clip.sourceUrl}")
-      case Some(SelectedClip.SelectedAudio(clip)) => println(s"🎯 Audio selezionato: ${clip.sourceUrl}")
-      case None                                   => println("⚪ Nessuna clip selezionata.")
-  }
+  view.onClipSelected = _ => ()
 
   view.onImportRequested = { () =>
     val currentWindow = view.getScene.getWindow
-    app.utils.MediaImporter.chooseVideoFile(currentWindow) match
-      case Some((file, durataReale)) =>
-        val fileUrl = file.toURI.toString
+    app.utils.MediaImporter.chooseVideoFile(currentWindow).foreach { case (file, durataReale) =>
+      val fileUrl = file.toURI.toString
 
-        val importedClip = VideoClip(
-          sourceUrl = fileUrl,
-          sourceLength = durataReale,
-          startTime = currentTime,
-          trimStart = 0.0,
-          duration = durataReale,
-          effect = VideoEffect.None
-        )
+      val importedClip = VideoClip(
+        sourceUrl = fileUrl,
+        sourceLength = durataReale,
+        startTime = currentTime,
+        trimStart = 0.0,
+        duration = durataReale,
+        effect = VideoEffect.None
+      )
 
-        currentTimeline = TimelineEngine.importVideoWithAudio(
-          timeline = currentTimeline,
-          videoTrackId = 1,
-          audioTrackId = 1,
-          videoClip = importedClip
-        )
+      currentTimeline = TimelineEngine.importVideoWithAudio(
+        timeline = currentTimeline,
+        videoTrackId = 1,
+        audioTrackId = 1,
+        videoClip = importedClip
+      )
 
-        view.render(currentTimeline)
-        syncVideoPreview()
-      case None =>
-        println("🟡 Selezione annullata.")
+      view.render(currentTimeline)
+      syncMediaPlayback()
+    }
   }
 
   view.onDeleteRequested = { () =>
-    view.getSelectedClip match
+    val videoTrack = currentTimeline.videoTracks.find(_.id == 1).get
+    val audioTrack = currentTimeline.audioTracks.find(_.id == 1).get
+
+    currentTimeline = view.getSelectedClip match
       case Some(SelectedClip.SelectedVideo(selVideo)) =>
-        val videoTrack = currentTimeline.videoTracks.find(_.id == 1).get
         val idx = videoTrack.clips.indexWhere(c => c.sourceUrl == selVideo.sourceUrl && Math.abs(c.startTime - selVideo.startTime) < 0.001)
-        if idx != -1 then
-          println(s"🗑️ Eliminazione della sola VideoClip all'indice: $idx")
-          currentTimeline = TimelineEngine.removeVideoClip(currentTimeline, trackId = 1, clipIndex = idx)
+        if idx != -1 then TimelineEngine.removeVideoClip(currentTimeline, 1, idx)
+        else currentTimeline
 
       case Some(SelectedClip.SelectedAudio(selAudio)) =>
-        val audioTrack = currentTimeline.audioTracks.find(_.id == 1).get
         val idx = audioTrack.clips.indexWhere(c => c.sourceUrl == selAudio.sourceUrl && Math.abs(c.startTime - selAudio.startTime) < 0.001)
-        if idx != -1 then
-          println(s"🗑️ Eliminazione della sola AudioClip all'indice: $idx")
-          currentTimeline = TimelineEngine.removeAudioClip(currentTimeline, trackId = 1, clipIndex = idx)
+        if idx != -1 then TimelineEngine.removeAudioClip(currentTimeline, 1, idx)
+        else currentTimeline
 
       case None =>
-        val videoTrack = currentTimeline.videoTracks.find(_.id == 1).get
-        val clipIndexOpt = videoTrack.clips.indexWhere { c =>
-          currentTime >= c.startTime && currentTime < (c.startTime + c.duration)
-        }
-        if clipIndexOpt != -1 then
-          println(s"🗑️ Eliminazione video + audio sotto il cursore all'indice: $clipIndexOpt")
-          var newTimeline = TimelineEngine.removeVideoClip(currentTimeline, trackId = 1, clipIndex = clipIndexOpt)
-          newTimeline = TimelineEngine.removeAudioClip(newTimeline, trackId = 1, clipIndex = clipIndexOpt)
-          currentTimeline = newTimeline
-        else
-          println("⚠️ Nessuna clip sotto il cursore da eliminare.")
+        val videoIdx = videoTrack.clips.indexWhere(c => currentTime >= c.startTime && currentTime < (c.startTime + c.duration))
+        val audioIdx = audioTrack.clips.indexWhere(c => currentTime >= c.startTime && currentTime < (c.startTime + c.duration))
+
+        val timelineAfterVideo = if videoIdx != -1 then
+          TimelineEngine.removeVideoClip(currentTimeline, 1, videoIdx)
+        else currentTimeline
+
+        if audioIdx != -1 then
+          TimelineEngine.removeAudioClip(timelineAfterVideo, 1, audioIdx)
+        else timelineAfterVideo
 
     view.selectClip(None)
     view.render(currentTimeline)
-    syncVideoPreview()
+    syncMediaPlayback()
   }
 
   view.onCutRequested = { cursorTime =>
@@ -153,29 +159,22 @@ class TimelineController:
         else timelineWithCutVideo
 
     view.render(currentTimeline)
-    syncVideoPreview()
+    syncMediaPlayback()
   }
 
   view.onSnapRequested = { () =>
-    view.getSelectedClip match
-      case Some(SelectedClip.SelectedVideo(_)) =>
-        currentTimeline = TimelineEngine.snapClipsTogether(currentTimeline, 1)
-      case Some(SelectedClip.SelectedAudio(_)) =>
-        currentTimeline = TimelineEngine.snapClipsTogether(currentTimeline, 1)
-      case None =>
-        currentTimeline = TimelineEngine.snapClipsTogether(currentTimeline, 1)
-
+    currentTimeline = TimelineEngine.snapClipsTogether(currentTimeline, 1)
     view.render(currentTimeline)
-    syncVideoPreview()
+    syncMediaPlayback()
   }
 
   view.onTimeChanged = { newCursorTime =>
     currentTime = newCursorTime
-    syncVideoPreview()
+    syncMediaPlayback()
   }
 
   view.onVideoTimeUpdated = { newVideoTime =>
-    val previousClip = getActiveClip()
+    val previousClip = getActiveVideoClip()
 
     previousClip.foreach { clip =>
       val calculatedTime = clip.startTime + (newVideoTime - clip.trimStart)
@@ -185,15 +184,23 @@ class TimelineController:
         view.updateTimelineTime(currentTime)
     }
 
-    val currentClip = getActiveClip()
+    val currentClip = getActiveVideoClip()
 
     if previousClip != currentClip then
       currentClip match
-        case Some(newClip) =>
-          println(s"🎬 Passaggio a clip successiva: ${newClip.sourceUrl}")
-          syncVideoPreview()
+        case Some(_) =>
+          syncMediaPlayback()
         case None =>
           view.updatePreview(None, 0.0, false)
+          getActiveAudioClip() match
+            case Some(aClip) =>
+              val relA = (currentTime - aClip.startTime) + aClip.trimStart
+              val isPlaying = currentPlayerState match
+                case Playing(_) => true
+                case Paused     => false
+              view.updateAudio(Some(aClip.sourceUrl), relA, isPlaying)
+            case None =>
+              view.updateAudio(None, 0.0, false)
   }
 
   view.onTogglePlaybackRequested = { () =>
@@ -204,7 +211,7 @@ class TimelineController:
     currentPlayerState = currentPlayerState match
       case Paused     => Playing(speed = 1.0)
       case Playing(_) => Paused
-    syncVideoPreview()
+    syncMediaPlayback()
   }
 
   view.onKeyReleased = (event: scalafx.scene.input.KeyEvent) => inputHandler.handleKeyEvent(event)
@@ -212,4 +219,4 @@ class TimelineController:
   def viewComponent: VBox = view
 
   view.render(currentTimeline)
-  syncVideoPreview()
+  syncMediaPlayback()

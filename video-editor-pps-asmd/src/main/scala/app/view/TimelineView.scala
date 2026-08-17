@@ -26,6 +26,7 @@ class TimelineView extends VBox:
   private var currentTimelineRef: Option[Timeline] = None
 
   private val preview = new VideoPreview(480.0, 270.0)
+  private val audioPlayer = new AudioPlayer()
   private val timelinePanel = new TimelinePanel()
 
   timelinePanel.onVideoClipClicked = { clip =>
@@ -95,6 +96,9 @@ class TimelineView extends VBox:
 
   def updatePreview(videoUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
     preview.update(videoUrlOpt, relativeTimeSeconds, isPlaying, onVideoTimeUpdated)
+
+  def updateAudio(audioUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
+    audioPlayer.update(audioUrlOpt, relativeTimeSeconds, isPlaying)
 
   def render(timeline: Timeline): Unit =
     currentTimelineRef = Some(timeline)
