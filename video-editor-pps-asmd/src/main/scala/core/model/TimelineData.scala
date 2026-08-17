@@ -25,7 +25,7 @@ case class AudioClip(
                       startTime: Double,
                       trimStart: Double,
                       duration: Double,
-                      volumePoints: List[(Double, Double)]
+                      volumePoints: List[(Double, Double)] = List.empty
                     ) extends MediaClip:
   override def withTimes(newStartTime: Double, newTrimStart: Double, newDuration: Double): AudioClip =
     this.copy(startTime = newStartTime, trimStart = newTrimStart, duration = newDuration)
@@ -43,3 +43,16 @@ case class Timeline(
                      audioTracks: List[AudioTrack],
                      currentTime: Double = 0.0
                    )
+
+extension [C <: MediaClip](clip: C)
+  def containsTime(time: Double): Boolean =
+    time >= clip.startTime && time < (clip.startTime + clip.duration)
+
+  def isSameAs(other: MediaClip): Boolean =
+    clip.sourceUrl == other.sourceUrl && Math.abs(clip.startTime - other.startTime) < 0.001
+
+  def relativeTimeAt(globalTime: Double): Double =
+    (globalTime - clip.startTime) + clip.trimStart
+
+  def endTime: Double =
+    clip.startTime + clip.duration
