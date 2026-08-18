@@ -20,21 +20,28 @@ class TimelineView extends VBox:
   var onTimeChanged: Double => Unit = _ => ()
   var onImportRequested: () => Unit = () => ()
   var onVideoTimeUpdated: Double => Unit = _ => ()
-  var onClipSelected: (String, Int, Int) => Unit = (_, _, _) => ()
+  var onClipSelected: Option[SelectedClip] => Unit = _ => ()
+  var onClipMoved: (MediaClip, Double) => Unit = (_, _) => ()
+
+  private var selectedClipOpt: Option[SelectedClip] = None
+  private var currentTimelineRef: Option[Timeline] = None
 
   private val preview = new VideoPreview(480.0, 270.0)
-  private val timelinePanel = new TimelinePanel()
+  private val audioPlayer = new AudioPlayer()
+  private val timelinePanel = new TimelinePanel(
+    onVideoClipClicked = clip => toggleVideoSelection(clip),
+    onAudioClipClicked = clip => toggleAudioSelection(clip),
+    onVideoClipMoved = (clip, newTime) => onClipMoved(clip, newTime),
+    onAudioClipMoved = (clip, newTime) => onClipMoved(clip, newTime)
+  )
 
-  timelinePanel.onClipSelected = (mediaType, trackId, clipIndex) =>
-    onClipSelected(mediaType, trackId, clipIndex)
-
-  private val timeSlider = new Slider {
+  private val timeSlider = new Slider:
     min = 0.0
     max = 60.0
     value = 0.0
     prefWidth = 600
     maxWidth = 800
-  }
+    focusTraversable = false
 
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
@@ -46,20 +53,49 @@ class TimelineView extends VBox:
 
   children = Seq(preview, timeSlider, timelinePanel, toolbar)
 
-  timeSlider.valueProperty.addListener { (_, _, newValue) =>
+  timeSlider.valueProperty.addListener: (_, _, newValue) =>
     val seconds = newValue.doubleValue()
     toolbar.updateTimeLabel(seconds)
     timelinePanel.updatePlayhead(seconds)
-
-    if timeSlider.isFocused then
+    if timeSlider.isValueChanging then
       onTimeChanged(seconds)
-  }
+
+  timeSlider.onMouseClicked = _ =>
+    onTimeChanged(timeSlider.value.value)
+
+  def getSelectedClip: Option[SelectedClip] = selectedClipOpt
+
+  def selectClip(targetOpt: Option[SelectedClip]): Unit =
+    selectedClipOpt = targetOpt
+    onClipSelected(selectedClipOpt)
+    currentTimelineRef.foreach(render)
+
+  def toggleVideoSelection(clip: VideoClip): Unit =
+    val isAlreadySelected = selectedClipOpt.exists:
+      case SelectedClip.SelectedVideo(v) => clip.isSameAs(v)
+      case _                             => false
+
+    if isAlreadySelected then selectClip(None)
+    else selectClip(Some(SelectedClip.SelectedVideo(clip)))
+
+  def toggleAudioSelection(clip: AudioClip): Unit =
+    val isAlreadySelected = selectedClipOpt.exists:
+      case SelectedClip.SelectedAudio(a) => clip.isSameAs(a)
+      case _                             => false
+
+    if isAlreadySelected then selectClip(None)
+    else selectClip(Some(SelectedClip.SelectedAudio(clip)))
 
   def updateTimelineTime(seconds: Double): Unit =
-    Platform.runLater { timeSlider.value = seconds }
+    Platform.runLater:
+      timeSlider.value = seconds
 
   def updatePreview(videoUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
-    preview.update(videoUrlOpt, relativeTimeSeconds, isPlaying, onVideoTimeUpdated)
+    preview.update(PlaybackState(videoUrlOpt, relativeTimeSeconds, isPlaying), onVideoTimeUpdated)
 
-  def render(timeline: Timeline, selectedClip: Option[(String, Int, Int)] = None): Unit =
-    timelinePanel.draw(timeline, timeSlider.value.value, selectedClip)
+  def updateAudio(audioUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
+    audioPlayer.update(audioUrlOpt, relativeTimeSeconds, isPlaying)
+
+  def render(timeline: Timeline): Unit =
+    currentTimelineRef = Some(timeline)
+    timelinePanel.draw(timeline, timeSlider.value.value, selectedClipOpt)

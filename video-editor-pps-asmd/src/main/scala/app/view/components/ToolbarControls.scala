@@ -1,7 +1,7 @@
 package app.view.components
 
-import scalafx.scene.layout.HBox
 import scalafx.scene.control.{Button, Label}
+import scalafx.scene.layout.HBox
 import scalafx.geometry.Pos
 
 class ToolbarControls(
@@ -15,18 +15,34 @@ class ToolbarControls(
   spacing = 10
   alignment = Pos.CenterLeft
 
-  val btnImport = new Button("📥 Import Video File") { onAction = _ => onImport() }
-  val btnDelete = new Button("🗑️ Delete Selected") { onAction = _ => onDelete() }
-  val btnCut = new Button("Cut at Cursor") { onAction = _ => onCut() }
-  val btnSnap = new Button("Snap Clips") { onAction = _ => onSnap() }
-  val btnPlay = new Button("Play/Pause") { onAction = _ => onPlay() }
+  private val importButton = new Button("Import"):
+    focusTraversable = false
+    onAction = _ => onImport()
 
-  val timeLabel = new Label {
-    text = "Time: 00:00.00"
-    style = "-fx-text-fill: white; -fx-font-family: 'Courier New'; -fx-font-size: 14px;"
-  }
+  private val deleteButton = new Button("Delete"):
+    focusTraversable = false
+    onAction = _ => onDelete()
 
-  children = Seq(btnImport, btnDelete, btnCut, btnSnap, btnPlay, timeLabel)
+  private val cutButton = new Button("Cut"):
+    focusTraversable = false
+    onAction = _ => onCut()
+
+  private val snapButton = new Button("Snap"):
+    focusTraversable = false
+    onAction = _ => onSnap()
+
+  private val playButton = new Button("Play/Pause"):
+    focusTraversable = false
+    onAction = _ => onPlay()
+
+  private val timeLabel = new Label("00:00.000"):
+    style = "-fx-text-fill: white; -fx-font-family: monospace; -fx-font-size: 14px;"
+
+  children = Seq(importButton, deleteButton, cutButton, snapButton, playButton, timeLabel)
 
   def updateTimeLabel(seconds: Double): Unit =
-    timeLabel.text = f"Time: ${seconds.toInt / 60}%02d:${seconds % 60}%05.2f"
+    val totalSeconds = seconds.toInt
+    val minutes = totalSeconds / 60
+    val remSeconds = totalSeconds % 60
+    val millis = ((seconds - totalSeconds) * 1000).toInt
+    timeLabel.text = f"$minutes%02d:$remSeconds%02d.$millis%03d"
