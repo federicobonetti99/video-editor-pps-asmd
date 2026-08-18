@@ -202,6 +202,14 @@ class TimelineController:
     syncMediaPlayback()
   }
 
+  view.onClipMoved = { (clip, newTime) =>
+    val current = state.get()
+    val updatedTimeline = TimelineEngine.moveClip(current.timeline, clip, newTime)
+    state.set(current.copy(timeline = updatedTimeline))
+    view.render(updatedTimeline)
+    syncMediaPlayback()
+  }
+
   view.onTimeChanged = { newCursorTime =>
     state.set(state.get().copy(currentTime = newCursorTime))
     syncMediaPlayback()

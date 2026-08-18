@@ -21,6 +21,7 @@ class TimelineView extends VBox:
   var onImportRequested: () => Unit = () => ()
   var onVideoTimeUpdated: Double => Unit = _ => ()
   var onClipSelected: Option[SelectedClip] => Unit = _ => ()
+  var onClipMoved: (MediaClip, Double) => Unit = (_, _) => ()
 
   private var selectedClipOpt: Option[SelectedClip] = None
   private var currentTimelineRef: Option[Timeline] = None
@@ -29,7 +30,9 @@ class TimelineView extends VBox:
   private val audioPlayer = new AudioPlayer()
   private val timelinePanel = new TimelinePanel(
     onVideoClipClicked = clip => toggleVideoSelection(clip),
-    onAudioClipClicked = clip => toggleAudioSelection(clip)
+    onAudioClipClicked = clip => toggleAudioSelection(clip),
+    onVideoClipMoved = (clip, newTime) => onClipMoved(clip, newTime),
+    onAudioClipMoved = (clip, newTime) => onClipMoved(clip, newTime)
   )
 
   private val timeSlider = new Slider:

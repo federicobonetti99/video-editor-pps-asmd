@@ -7,8 +7,10 @@ import scalafx.scene.paint.Color
 import scalafx.scene.control.Label
 import scalafx.scene.Node
 import scalafx.application.Platform
+import scalafx.scene.Cursor
 import core.model.*
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 
 enum SelectedClip:
   case SelectedVideo(clip: VideoClip)
@@ -18,7 +20,9 @@ class TimelinePanel(
                      pixelsPerSecond: Double = 20.0,
                      trackHeight: Double = 50.0,
                      val onVideoClipClicked: VideoClip => Unit = _ => (),
-                     val onAudioClipClicked: AudioClip => Unit = _ => ()
+                     val onAudioClipClicked: AudioClip => Unit = _ => (),
+                     val onVideoClipMoved: (VideoClip, Double) => Unit = (_, _) => (),
+                     val onAudioClipMoved: (AudioClip, Double) => Unit = (_, _) => ()
                    ) extends Pane:
 
   minHeight = 200
@@ -42,10 +46,15 @@ class TimelinePanel(
                                                yPos: Double,
                                                fillColor: Color,
                                                isSelected: Boolean,
-                                               onClick: C => Unit
+                                               onClick: C => Unit,
+                                               onMove: (C, Double) => Unit
                                              ): Seq[Node] =
+    val initialX = mediaClip.startTime * pixelsPerSecond
+    val dragStartX = new AtomicReference[Double](0.0)
+    val hasDragged = new AtomicReference[Boolean](false)
+
     val clipRectangle = new Rectangle:
-      x = mediaClip.startTime * pixelsPerSecond
+      x = initialX
       y = yPos
       width = mediaClip.duration * pixelsPerSecond
       height = trackHeight
@@ -54,19 +63,46 @@ class TimelinePanel(
       strokeWidth = if isSelected then 4.0 else 2.0
       arcWidth = 8
       arcHeight = 8
-      onMouseClicked = event =>
-        onClick(mediaClip)
-        event.consume()
+      cursor = Cursor.Hand
 
     val clipLabel = new Label:
       text = new File(mediaClip.sourceUrl).getName
-      layoutX = (mediaClip.startTime * pixelsPerSecond) + 5
+      layoutX = initialX + 5
       layoutY = yPos + 12
       style = "-fx-text-fill: black; -fx-font-weight: bold; -fx-font-size: 11px;"
       maxWidth = (mediaClip.duration * pixelsPerSecond) - 10
-      onMouseClicked = event =>
+      cursor = Cursor.Hand
+
+    val handleMousePressed: scalafx.scene.input.MouseEvent => Unit = event =>
+      dragStartX.set(event.sceneX)
+      hasDragged.set(false)
+      event.consume()
+
+    val handleMouseDragged: scalafx.scene.input.MouseEvent => Unit = event =>
+      val deltaX = event.sceneX - dragStartX.get()
+      if Math.abs(deltaX) > 2.0 then
+        hasDragged.set(true)
+        val clampedDeltaX = Math.max(-initialX, deltaX)
+        clipRectangle.translateX = clampedDeltaX
+        clipLabel.translateX = clampedDeltaX
+      event.consume()
+
+    val handleMouseReleased: scalafx.scene.input.MouseEvent => Unit = event =>
+      if hasDragged.get() then
+        val finalX = Math.max(0.0, initialX + clipRectangle.translateX.value)
+        val newStartTime = finalX / pixelsPerSecond
+        onMove(mediaClip, newStartTime)
+      else
         onClick(mediaClip)
-        event.consume()
+      event.consume()
+
+    clipRectangle.onMousePressed = handleMousePressed
+    clipRectangle.onMouseDragged = handleMouseDragged
+    clipRectangle.onMouseReleased = handleMouseReleased
+
+    clipLabel.onMousePressed = handleMousePressed
+    clipLabel.onMouseDragged = handleMouseDragged
+    clipLabel.onMouseReleased = handleMouseReleased
 
     Seq(clipRectangle, clipLabel)
 
@@ -81,7 +117,7 @@ class TimelinePanel(
           val isSelected = selectedClip.exists:
             case SelectedClip.SelectedVideo(v) => videoClip.isSameAs(v)
             case _                             => false
-          renderClipNodes(videoClip, trackY, Color.DeepSkyBlue, isSelected, onVideoClipClicked)
+          renderClipNodes(videoClip, trackY, Color.DeepSkyBlue, isSelected, onVideoClipClicked, onVideoClipMoved)
 
       val videoSectionHeight = baseVideoY + timeline.videoTracks.size * (trackHeight + trackSpacing)
       val separatorYPos = videoSectionHeight + 5.0
@@ -101,7 +137,7 @@ class TimelinePanel(
           val isSelected = selectedClip.exists:
             case SelectedClip.SelectedAudio(a) => audioClip.isSameAs(a)
             case _                             => false
-          renderClipNodes(audioClip, trackY, Color.LightGreen, isSelected, onAudioClipClicked)
+          renderClipNodes(audioClip, trackY, Color.LightGreen, isSelected, onAudioClipClicked, onAudioClipMoved)
 
       children = Seq(playheadLine) ++ videoNodes ++ Seq(separatorLine) ++ audioNodes
       updatePlayhead(currentCursorTime)

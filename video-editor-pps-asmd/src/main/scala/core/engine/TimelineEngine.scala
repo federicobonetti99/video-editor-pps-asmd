@@ -39,15 +39,26 @@ object TimelineEngine:
 
   def moveClip[C <: MediaClip](timeline: Timeline, target: C, newStartTime: Double): Timeline =
     val safeStartTime = Math.max(0.0, newStartTime)
+    val targetEndTime = safeStartTime + target.duration
+
+    def hasOverlap(other: MediaClip): Boolean =
+      val otherEndTime = other.startTime + other.duration
+      Math.max(safeStartTime, other.startTime) < Math.min(targetEndTime, otherEndTime)
+
     target match
       case v: VideoClip =>
         val updatedVideoTracks = timeline.videoTracks.map { track =>
           if track.clips.exists(_.isSameAs(v)) then
-            val updatedClips = track.clips.map { clip =>
-              if clip.isSameAs(v) then clip.withTimes(safeStartTime, clip.trimStart, clip.duration).asInstanceOf[VideoClip]
-              else clip
-            }
-            track.copy(clips = updatedClips.sortBy(_.startTime))
+            val otherClips = track.clips.filterNot(_.isSameAs(v))
+            val isOverlapping = otherClips.exists(hasOverlap)
+
+            if isOverlapping then track
+            else
+              val updatedClips = track.clips.map { clip =>
+                if clip.isSameAs(v) then clip.withTimes(safeStartTime, clip.trimStart, clip.duration).asInstanceOf[VideoClip]
+                else clip
+              }
+              track.copy(clips = updatedClips.sortBy(_.startTime))
           else track
         }
         timeline.copy(videoTracks = updatedVideoTracks)
@@ -55,15 +66,20 @@ object TimelineEngine:
       case a: AudioClip =>
         val updatedAudioTracks = timeline.audioTracks.map { track =>
           if track.clips.exists(_.isSameAs(a)) then
-            val updatedClips = track.clips.map { clip =>
-              if clip.isSameAs(a) then clip.withTimes(safeStartTime, clip.trimStart, clip.duration).asInstanceOf[AudioClip]
-              else clip
-            }
-            track.copy(clips = updatedClips.sortBy(_.startTime))
+            val otherClips = track.clips.filterNot(_.isSameAs(a))
+            val isOverlapping = otherClips.exists(hasOverlap)
+
+            if isOverlapping then track
+            else
+              val updatedClips = track.clips.map { clip =>
+                if clip.isSameAs(a) then clip.withTimes(safeStartTime, clip.trimStart, clip.duration).asInstanceOf[AudioClip]
+                else clip
+              }
+              track.copy(clips = updatedClips.sortBy(_.startTime))
           else track
         }
         timeline.copy(audioTracks = updatedAudioTracks)
-
+        
   def getVideoClipsAtTime(timeline: Timeline, timestamp: Double): List[VideoClip] =
     timeline.videoTracks.flatMap { track =>
       track.clips.filter { clip =>
