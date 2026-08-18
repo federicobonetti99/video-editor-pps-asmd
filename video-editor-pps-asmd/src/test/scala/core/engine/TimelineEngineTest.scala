@@ -248,3 +248,54 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     snappedClips(1).startTime shouldBe 4.0
     snappedClips(1).sourceUrl shouldBe "a1.mp3"
   }
+
+  test("moveClip should update startTime and sort clips chronologically for video") {
+    val clip1 = VideoClip("v1.mp4", startTime = 0.0, trimStart = 0.0, duration = 5.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val clip2 = VideoClip("v2.mp4", startTime = 5.0, trimStart = 0.0, duration = 5.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val timeline = Timeline(videoTracks = List(VideoTrack(1, List(clip1, clip2))), audioTracks = Nil)
+  
+    val updated = TimelineEngine.moveClip(timeline, target = clip1, newStartTime = 12.0)
+    val clips = updated.videoTracks.head.clips
+  
+    clips(0).sourceUrl shouldBe "v2.mp4"
+    clips(0).startTime shouldBe 5.0
+    clips(1).sourceUrl shouldBe "v1.mp4"
+    clips(1).startTime shouldBe 12.0
+  }
+  
+  test("moveClip backwards should correctly place the clip before earlier clips") {
+    val clip1 = VideoClip("v1.mp4", startTime = 10.0, trimStart = 0.0, duration = 4.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val clip2 = VideoClip("v2.mp4", startTime = 20.0, trimStart = 0.0, duration = 4.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val timeline = Timeline(videoTracks = List(VideoTrack(1, List(clip1, clip2))), audioTracks = Nil)
+  
+    val updated = TimelineEngine.moveClip(timeline, target = clip2, newStartTime = 2.0)
+    val clips = updated.videoTracks.head.clips
+  
+    clips(0).sourceUrl shouldBe "v2.mp4"
+    clips(0).startTime shouldBe 2.0
+    clips(1).sourceUrl shouldBe "v1.mp4"
+    clips(1).startTime shouldBe 10.0
+  }
+  
+  test("moveClip should clamp newStartTime to 0.0 if negative") {
+    val clip = VideoClip("v1.mp4", startTime = 5.0, trimStart = 0.0, duration = 3.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val timeline = Timeline(videoTracks = List(VideoTrack(1, List(clip))), audioTracks = Nil)
+  
+    val updated = TimelineEngine.moveClip(timeline, target = clip, newStartTime = -4.0)
+  
+    updated.videoTracks.head.clips.head.startTime shouldBe 0.0
+  }
+  
+  test("moveClip should work polymorphically on audio clips") {
+    val audio1 = AudioClip("a1.mp3", startTime = 0.0, trimStart = 0.0, duration = 3.0, sourceLength = 10.0, volumePoints = Nil)
+    val audio2 = AudioClip("a2.mp3", startTime = 4.0, trimStart = 0.0, duration = 3.0, sourceLength = 10.0, volumePoints = Nil)
+    val timeline = Timeline(videoTracks = Nil, audioTracks = List(AudioTrack(1, List(audio1, audio2))))
+  
+    val updated = TimelineEngine.moveClip(timeline, target = audio1, newStartTime = 8.0)
+    val clips = updated.audioTracks.head.clips
+  
+    clips(0).sourceUrl shouldBe "a2.mp3"
+    clips(0).startTime shouldBe 4.0
+    clips(1).sourceUrl shouldBe "a1.mp3"
+    clips(1).startTime shouldBe 8.0
+  }

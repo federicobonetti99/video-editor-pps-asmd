@@ -35,7 +35,34 @@ object TimelineEngine:
     modifyVideoTrack(timeline, trackId)(track => track.copy(clips = snapClipsGeneric(track.clips)))
 
   def snapClipsTogether(timeline: Timeline, trackId: Int): Timeline =
-    snapVideoClips(timeline, trackId)
+    snapAllTracks(timeline)
+
+  def moveClip[C <: MediaClip](timeline: Timeline, target: C, newStartTime: Double): Timeline =
+    val safeStartTime = Math.max(0.0, newStartTime)
+    target match
+      case v: VideoClip =>
+        val updatedVideoTracks = timeline.videoTracks.map { track =>
+          if track.clips.exists(_.isSameAs(v)) then
+            val updatedClips = track.clips.map { clip =>
+              if clip.isSameAs(v) then clip.withTimes(safeStartTime, clip.trimStart, clip.duration).asInstanceOf[VideoClip]
+              else clip
+            }
+            track.copy(clips = updatedClips.sortBy(_.startTime))
+          else track
+        }
+        timeline.copy(videoTracks = updatedVideoTracks)
+
+      case a: AudioClip =>
+        val updatedAudioTracks = timeline.audioTracks.map { track =>
+          if track.clips.exists(_.isSameAs(a)) then
+            val updatedClips = track.clips.map { clip =>
+              if clip.isSameAs(a) then clip.withTimes(safeStartTime, clip.trimStart, clip.duration).asInstanceOf[AudioClip]
+              else clip
+            }
+            track.copy(clips = updatedClips.sortBy(_.startTime))
+          else track
+        }
+        timeline.copy(audioTracks = updatedAudioTracks)
 
   def getVideoClipsAtTime(timeline: Timeline, timestamp: Double): List[VideoClip] =
     timeline.videoTracks.flatMap { track =>
@@ -43,7 +70,6 @@ object TimelineEngine:
         timestamp >= clip.startTime && timestamp < (clip.startTime + clip.duration)
       }
     }
-
 
   def addAudioClip(timeline: Timeline, trackId: Int, clip: AudioClip): Timeline =
     modifyAudioTrack(timeline, trackId) { track =>
@@ -87,9 +113,13 @@ object TimelineEngine:
     val timelineWithVideoCut = cutVideoClip(timeline, videoTrackId, clipIndex, relativeCutTime)
     cutAudioClip(timelineWithVideoCut, audioTrackId, clipIndex, relativeCutTime)
 
+  def snapAllTracks(timeline: Timeline): Timeline =
+    val updatedVideoTracks = timeline.videoTracks.map(t => t.copy(clips = snapClipsGeneric(t.clips)))
+    val updatedAudioTracks = timeline.audioTracks.map(t => t.copy(clips = snapClipsGeneric(t.clips)))
+    timeline.copy(videoTracks = updatedVideoTracks, audioTracks = updatedAudioTracks)
+
   def snapAllTracks(timeline: Timeline, videoTrackId: Int, audioTrackId: Int): Timeline =
-    val snappedVideo = snapVideoClips(timeline, videoTrackId)
-    snapAudioClips(snappedVideo, audioTrackId)
+    snapAllTracks(timeline)
 
   def updatePlaybackTime(
                           currentTime: Double,
