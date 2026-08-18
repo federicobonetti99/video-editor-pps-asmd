@@ -8,6 +8,8 @@ import scalafx.scene.Node
 import scalafx.application.Platform
 import scalafx.scene.Cursor
 import core.model.*
+import scalafx.scene.paint.Color
+
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
@@ -27,9 +29,6 @@ class TimelinePanel(
   prefHeight = 250
   prefWidth = 2000
   style = "-fx-background-color: #222222;"
-
-  private val pixelsPerSecond = 20.0
-  private val trackHeight = 50.0
 
   var onClipSelected: (String, Int, Int) => Unit = (_, _, _) => ()
 
