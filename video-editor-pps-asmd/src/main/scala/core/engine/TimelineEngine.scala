@@ -37,6 +37,22 @@ object TimelineEngine:
   def snapClipsTogether(timeline: Timeline, trackId: Int): Timeline =
     snapAllTracks(timeline)
 
+  def applyEffectToVideoClip(
+                              timeline: Timeline,
+                              trackId: Int,
+                              clipIndex: Int,
+                              effect: VideoEffect
+                            ): Timeline =
+    modifyVideoTrack(timeline, trackId) { track =>
+      if track.clips.isDefinedAt(clipIndex) then
+        val updatedClips = track.clips.updated(
+          clipIndex,
+          track.clips(clipIndex).copy(effect = effect)
+        )
+        track.copy(clips = updatedClips)
+      else track
+    }
+
   def moveClip[C <: MediaClip](timeline: Timeline, target: C, newStartTime: Double): Timeline =
     val safeStartTime = Math.max(0.0, newStartTime)
     val targetEndTime = safeStartTime + target.duration
@@ -79,7 +95,7 @@ object TimelineEngine:
           else track
         }
         timeline.copy(audioTracks = updatedAudioTracks)
-        
+
   def getVideoClipsAtTime(timeline: Timeline, timestamp: Double): List[VideoClip] =
     timeline.videoTracks.flatMap { track =>
       track.clips.filter { clip =>

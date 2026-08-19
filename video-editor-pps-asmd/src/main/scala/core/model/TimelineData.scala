@@ -14,7 +14,7 @@ case class VideoClip(
                       startTime: Double,
                       trimStart: Double,
                       duration: Double,
-                      effect: VideoEffect
+                      effect: VideoEffect = VideoEffect.None
                     ) extends MediaClip:
   override def withTimes(newStartTime: Double, newTrimStart: Double, newDuration: Double): VideoClip =
     this.copy(startTime = newStartTime, trimStart = newTrimStart, duration = newDuration)
@@ -29,11 +29,6 @@ case class AudioClip(
                     ) extends MediaClip:
   override def withTimes(newStartTime: Double, newTrimStart: Double, newDuration: Double): AudioClip =
     this.copy(startTime = newStartTime, trimStart = newTrimStart, duration = newDuration)
-
-enum VideoEffect:
-  case None
-  case FadeIn(duration: Double)
-  case BlackAndWhite
 
 case class VideoTrack(id: Int, clips: List[VideoClip])
 case class AudioTrack(id: Int, clips: List[AudioClip])
