@@ -1,15 +1,22 @@
 package app.view.components
 
+import core.engine.EffectCalculator
+import core.model.VideoEffect
+import javafx.scene.effect.{ColorAdjust, SepiaTone}
+import scalafx.Includes.*
+import scalafx.application.Platform
+import scalafx.geometry.Pos
 import scalafx.scene.layout.StackPane
 import scalafx.scene.media.MediaView
-import scalafx.geometry.Pos
-import scalafx.application.Platform
+
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 case class PlaybackState(
                           mediaUrl: Option[String],
                           relativeTime: Double,
-                          isPlaying: Boolean
+                          isPlaying: Boolean,
+                          effect: VideoEffect = VideoEffect.None,
+                          clipDuration: Double = 0.0
                         )
 
 class VideoPreview(width: Double, height: Double) extends StackPane:
@@ -37,6 +44,7 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
     Platform.runLater:
       state.mediaUrl match
         case Some(url) =>
+          applyVisualEffects(state.effect, state.relativeTime, state.clipDuration)
           val targetDuration = javafx.util.Duration.seconds(state.relativeTime)
 
           if !currentLoadedUrl.get().contains(url) then
@@ -99,6 +107,7 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
                     player.seek(targetDuration)
 
         case None =>
+          resetVisualEffects()
           isSeekingOrLoading.set(false)
           activeJfxPlayer.get().foreach: p =>
             p.stop()
@@ -106,3 +115,44 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
           activeJfxPlayer.set(None)
           currentLoadedUrl.set(None)
           jfxMediaView.setMediaPlayer(null)
+
+  private def applyVisualEffects(effect: VideoEffect, relativeTime: Double, duration: Double): Unit =
+    val transform = EffectCalculator.computeTransform(effect, relativeTime, duration)
+    jfxMediaView.setScaleX(transform.scale)
+    jfxMediaView.setScaleY(transform.scale)
+    jfxMediaView.setTranslateX(transform.translateX)
+    jfxMediaView.setTranslateY(transform.translateY)
+    jfxMediaView.setOpacity(transform.opacity)
+
+    effect match
+      case VideoEffect.Grayscale =>
+        val ca = new ColorAdjust()
+        ca.setSaturation(-1.0)
+        jfxMediaView.setEffect(ca)
+
+      case VideoEffect.Sepia =>
+        val sepia = new SepiaTone()
+        sepia.setLevel(0.8)
+        jfxMediaView.setEffect(sepia)
+
+      case VideoEffect.Brightness(level) =>
+        val ca = new ColorAdjust()
+        ca.setBrightness(level)
+        jfxMediaView.setEffect(ca)
+
+      case VideoEffect.Invert =>
+        val ca = new ColorAdjust()
+        ca.setHue(1.0)
+        ca.setContrast(-1.0)
+        jfxMediaView.setEffect(ca)
+
+      case _ =>
+        jfxMediaView.setEffect(null)
+
+  private def resetVisualEffects(): Unit =
+    jfxMediaView.setScaleX(1.0)
+    jfxMediaView.setScaleY(1.0)
+    jfxMediaView.setTranslateX(0.0)
+    jfxMediaView.setTranslateY(0.0)
+    jfxMediaView.setOpacity(1.0)
+    jfxMediaView.setEffect(null)

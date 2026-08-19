@@ -39,7 +39,8 @@ class TimelineController:
     onImportRequested = () => handleImport(),
     onVideoTimeUpdated = _ => (),
     onClipSelected = _ => (),
-    onClipMoved = (clip, newTime) => handleClipMoved(clip, newTime)
+    onClipMoved = (clip, newTime) => handleClipMoved(clip, newTime),
+    onEffectSelected = effect => handleEffectApplied(effect)
   )
 
   private val inputHandler = new InputHandler(onTogglePlayback = () => handleTogglePlayback())
@@ -71,7 +72,14 @@ class TimelineController:
 
             val currVideo = getActiveVideoClip()
             val currAudio = getActiveAudioClip()
-            if prevVideo != currVideo || prevAudio != currAudio then
+
+            val hasDynamicEffect = currVideo.exists { c =>
+              c.effect match
+                case VideoEffect.ZoomIn(_) | VideoEffect.Shake(_, _) | VideoEffect.FadeIn(_) => true
+                case _ => false
+            }
+
+            if prevVideo != currVideo || prevAudio != currAudio || hasDynamicEffect then
               syncMediaPlayback()
         case Paused =>
           masterTimer.stop()
@@ -104,9 +112,15 @@ class TimelineController:
 
     getActiveVideoClip() match
       case Some(clip) =>
-        view.updatePreview(Some(clip.sourceUrl), clip.relativeTimeAt(current.currentTime), isPlaying)
+        view.updatePreview(
+          Some(clip.sourceUrl),
+          clip.relativeTimeAt(current.currentTime),
+          isPlaying,
+          clip.effect,
+          clip.duration
+        )
       case None =>
-        view.updatePreview(None, 0.0, false)
+        view.updatePreview(None, 0.0, false, VideoEffect.None, 0.0)
 
     getActiveAudioClip() match
       case Some(clip) =>
@@ -200,6 +214,22 @@ class TimelineController:
   private def handleTimeChanged(newCursorTime: Double): Unit =
     state.set(state.get().copy(currentTime = newCursorTime))
     syncMediaPlayback()
+
+  private def handleEffectApplied(effect: VideoEffect): Unit =
+    val current = state.get()
+    view.getSelectedClip match
+      case Some(SelectedClip.SelectedVideo(selVideo)) =>
+        findVideoTrack(1).foreach { track =>
+          val idx = track.clips.indexWhere(_.isSameAs(selVideo))
+          if idx != -1 then
+            val updatedTimeline = TimelineEngine.applyEffectToVideoClip(current.timeline, 1, idx, effect)
+            val updatedClip = track.clips(idx).copy(effect = effect)
+            state.set(current.copy(timeline = updatedTimeline))
+            view.selectClip(Some(SelectedClip.SelectedVideo(updatedClip)))
+            view.render(updatedTimeline)
+            syncMediaPlayback()
+        }
+      case _ => ()
 
   private def calculateTimelineAfterDelete(): Timeline =
     val current = state.get()

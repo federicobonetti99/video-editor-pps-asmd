@@ -17,7 +17,8 @@ class TimelineView(
                     val onImportRequested: () => Unit = () => (),
                     val onVideoTimeUpdated: Double => Unit = _ => (),
                     val onClipSelected: Option[SelectedClip] => Unit = _ => (),
-                    val onClipMoved: (MediaClip, Double) => Unit = (_, _) => ()
+                    val onClipMoved: (MediaClip, Double) => Unit = (_, _) => (),
+                    val onEffectSelected: VideoEffect => Unit = _ => ()
                   ) extends VBox:
 
   spacing = 15
@@ -47,9 +48,10 @@ class TimelineView(
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
     onDelete = () => onDeleteRequested(),
-    onCut = () => onCutRequested(timeSlider.value.value),
-    onSnap = () => onSnapRequested(),
-    onPlay = () => onTogglePlaybackRequested()
+    onCut    = () => onCutRequested(timeSlider.value.value),
+    onSnap   = () => onSnapRequested(),
+    onPlay   = () => onTogglePlaybackRequested(),
+    onEffectSelected = effect => onEffectSelected(effect)
   )
 
   children = Seq(preview, timeSlider, timelinePanel, toolbar)
@@ -68,6 +70,9 @@ class TimelineView(
 
   def selectClip(targetOpt: Option[SelectedClip]): Unit =
     selectedClipProperty.value = targetOpt
+    targetOpt match
+      case Some(SelectedClip.SelectedVideo(v)) => toolbar.setSelectedEffect(v.effect)
+      case _                                  => toolbar.setSelectedEffect(VideoEffect.None)
     onClipSelected(targetOpt)
     currentTimelineProperty.value.foreach(render)
 
@@ -91,8 +96,23 @@ class TimelineView(
     Platform.runLater:
       timeSlider.value = seconds
 
-  def updatePreview(videoUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
-    preview.update(PlaybackState(videoUrlOpt, relativeTimeSeconds, isPlaying), onVideoTimeUpdated)
+  def updatePreview(
+                     videoUrlOpt: Option[String],
+                     relativeTimeSeconds: Double,
+                     isPlaying: Boolean,
+                     effect: VideoEffect = VideoEffect.None,
+                     clipDuration: Double = 0.0
+                   ): Unit =
+    preview.update(
+      PlaybackState(
+        mediaUrl = videoUrlOpt,
+        relativeTime = relativeTimeSeconds,
+        isPlaying = isPlaying,
+        effect = effect,
+        clipDuration = clipDuration
+      ),
+      onVideoTimeUpdated
+    )
 
   def updateAudio(audioUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
     audioPlayer.update(audioUrlOpt, relativeTimeSeconds, isPlaying)
