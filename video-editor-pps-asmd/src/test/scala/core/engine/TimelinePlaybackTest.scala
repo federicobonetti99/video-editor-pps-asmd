@@ -7,7 +7,7 @@ class TimelinePlaybackTest extends AnyFunSuite:
 
   val maxTimelineDuration = 60.0
 
-  test("Se il player è in PAUSA, il tempo non deve avanzare anche se passa il tempo reale") {
+  test("When the player is PAUSED, playback time should not advance even if real time passes") {
     val currentTime = 10.0
     val deltaTime = 0.5
 
@@ -18,10 +18,10 @@ class TimelinePlaybackTest extends AnyFunSuite:
       maxTimelineDuration
     )
 
-    assert(resultTime == 10.0, s"Il tempo doveva rimanere 10.0, invece è ${resultTime}")
+    assert(resultTime == 10.0, s"Playback time should remain 10.0, but was ${resultTime}")
   }
 
-  test("Se il player è in PLAYING, il tempo deve avanzare in base al deltaTime") {
+  test("When the player is PLAYING, playback time should advance according to deltaTime") {
     val currentTime = 10.0
     val deltaTime = 0.5
 
@@ -32,10 +32,10 @@ class TimelinePlaybackTest extends AnyFunSuite:
       maxTimelineDuration
     )
 
-    assert(resultTime == 10.5, s"Il tempo doveva avanzare a 10.5, invece è ${resultTime}")
+    assert(resultTime == 10.5, s"Playback time should advance to 10.5, but was ${resultTime}")
   }
 
-  test("Se il player è in PLAYING con velocità 2x, il tempo deve avanzare del doppio") {
+  test("When the player is PLAYING at 2x speed, playback time should advance at double the rate") {
     val currentTime = 10.0
     val deltaTime = 0.5
 
@@ -46,12 +46,12 @@ class TimelinePlaybackTest extends AnyFunSuite:
       maxTimelineDuration
     )
 
-    assert(resultTime == 11.0, s"Al doppio della velocità doveva essere 11.0, invece è ${resultTime}")
+    assert(resultTime == 11.0, s"At double speed it should be 11.0, but was ${resultTime}")
   }
 
-  test("Il cursore del tempo non deve MAI superare la durata massima della timeline") {
+  test("The playback cursor must NEVER exceed the maximum timeline duration") {
     val currentTime = 59.8
-    val deltaTime = 0.5 
+    val deltaTime = 0.5
 
     val resultTime = TimelineEngine.updatePlaybackTime(
       currentTime,
@@ -60,5 +60,5 @@ class TimelinePlaybackTest extends AnyFunSuite:
       maxTimelineDuration
     )
 
-    assert(resultTime == 60.0, s"Il tempo doveva bloccarsi a 60.0, invece è andato a ${resultTime}")
+    assert(resultTime == 60.0, s"Playback time should clamp to 60.0, but was ${resultTime}")
   }

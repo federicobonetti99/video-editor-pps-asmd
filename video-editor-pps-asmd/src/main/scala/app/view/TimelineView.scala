@@ -4,30 +4,31 @@ import scalafx.Includes.*
 import scalafx.application.Platform
 import scalafx.scene.control.Slider
 import scalafx.scene.layout.VBox
-import scalafx.scene.input.{KeyEvent, KeyCode}
+import scalafx.beans.property.ObjectProperty
 import core.model.*
 import app.view.components.*
 
-class TimelineView extends VBox:
+class TimelineView(
+                    val onDeleteRequested: () => Unit = () => (),
+                    val onCutRequested: Double => Unit = _ => (),
+                    val onSnapRequested: () => Unit = () => (),
+                    val onTogglePlaybackRequested: () => Unit = () => (),
+                    val onTimeChanged: Double => Unit = _ => (),
+                    val onImportRequested: () => Unit = () => (),
+                    val onVideoTimeUpdated: Double => Unit = _ => (),
+                    val onClipSelected: Option[SelectedClip] => Unit = _ => (),
+                    val onClipMoved: (MediaClip, Double) => Unit = (_, _) => ()
+                  ) extends VBox:
 
   spacing = 15
   style = "-fx-padding: 15; -fx-background-color: #1a1a1a;"
 
-  var onDeleteRequested: () => Unit = () => ()
-  var onCutRequested: Double => Unit = _ => ()
-  var onSnapRequested: () => Unit = () => ()
-  var onTogglePlaybackRequested: () => Unit = () => ()
-  var onTimeChanged: Double => Unit = _ => ()
-  var onImportRequested: () => Unit = () => ()
-  var onVideoTimeUpdated: Double => Unit = _ => ()
-  var onClipSelected: Option[SelectedClip] => Unit = _ => ()
-  var onClipMoved: (MediaClip, Double) => Unit = (_, _) => ()
-
-  private var selectedClipOpt: Option[SelectedClip] = None
-  private var currentTimelineRef: Option[Timeline] = None
+  private val selectedClipProperty = ObjectProperty[Option[SelectedClip]](None)
+  private val currentTimelineProperty = ObjectProperty[Option[Timeline]](None)
 
   private val preview = new VideoPreview(480.0, 270.0)
   private val audioPlayer = new AudioPlayer()
+
   private val timelinePanel = new TimelinePanel(
     onVideoClipClicked = clip => toggleVideoSelection(clip),
     onAudioClipClicked = clip => toggleAudioSelection(clip),
@@ -63,15 +64,15 @@ class TimelineView extends VBox:
   timeSlider.onMouseClicked = _ =>
     onTimeChanged(timeSlider.value.value)
 
-  def getSelectedClip: Option[SelectedClip] = selectedClipOpt
+  def getSelectedClip: Option[SelectedClip] = selectedClipProperty.value
 
   def selectClip(targetOpt: Option[SelectedClip]): Unit =
-    selectedClipOpt = targetOpt
-    onClipSelected(selectedClipOpt)
-    currentTimelineRef.foreach(render)
+    selectedClipProperty.value = targetOpt
+    onClipSelected(targetOpt)
+    currentTimelineProperty.value.foreach(render)
 
   def toggleVideoSelection(clip: VideoClip): Unit =
-    val isAlreadySelected = selectedClipOpt.exists:
+    val isAlreadySelected = selectedClipProperty.value.exists:
       case SelectedClip.SelectedVideo(v) => clip.isSameAs(v)
       case _                             => false
 
@@ -79,7 +80,7 @@ class TimelineView extends VBox:
     else selectClip(Some(SelectedClip.SelectedVideo(clip)))
 
   def toggleAudioSelection(clip: AudioClip): Unit =
-    val isAlreadySelected = selectedClipOpt.exists:
+    val isAlreadySelected = selectedClipProperty.value.exists:
       case SelectedClip.SelectedAudio(a) => clip.isSameAs(a)
       case _                             => false
 
@@ -97,5 +98,5 @@ class TimelineView extends VBox:
     audioPlayer.update(audioUrlOpt, relativeTimeSeconds, isPlaying)
 
   def render(timeline: Timeline): Unit =
-    currentTimelineRef = Some(timeline)
-    timelinePanel.draw(timeline, timeSlider.value.value, selectedClipOpt)
+    currentTimelineProperty.value = Some(timeline)
+    timelinePanel.draw(timeline, timeSlider.value.value, selectedClipProperty.value)
