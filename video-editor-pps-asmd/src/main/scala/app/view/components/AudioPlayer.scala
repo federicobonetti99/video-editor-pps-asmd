@@ -4,52 +4,61 @@ import scalafx.scene.media.{Media, MediaPlayer}
 import scalafx.util.Duration
 import java.util.concurrent.atomic.AtomicReference
 
+case class ActiveAudioTrackInfo(
+                                 sourceUrl: String,
+                                 relativeTimeSeconds: Double
+                               )
+
 class AudioPlayer:
 
-  private val currentPlayer = new AtomicReference[Option[MediaPlayer]](None)
-  private val currentUrl = new AtomicReference[Option[String]](None)
+  private val activePlayers = new AtomicReference[Map[String, MediaPlayer]](Map.empty)
 
-  def update(audioUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
-    (audioUrlOpt, currentUrl.get()) match
-      case (None, _) =>
-        stopAndDispose()
+  def update(activeAudios: List[ActiveAudioTrackInfo], isPlaying: Boolean): Unit =
+    val currentMap = activePlayers.get()
+    val activeUrls = activeAudios.map(_.sourceUrl).toSet
 
-      case (Some(newUrl), current) if !current.contains(newUrl) =>
-        stopAndDispose()
-        try
-          val media = new Media(newUrl)
-          val player = new MediaPlayer(media)
-          player.startTime = Duration(0.0)
+    val (stillActiveMap, removedMap) = currentMap.partition((url, _) => activeUrls.contains(url))
+    removedMap.values.foreach: player =>
+      try
+        player.stop()
+        player.dispose()
+      catch
+        case _: Throwable => ()
 
-          player.onReady = () =>
-            player.seek(Duration(relativeTimeSeconds * 1000.0))
-            if isPlaying then player.play() else player.pause()
-
-          currentPlayer.set(Some(player))
-          currentUrl.set(Some(newUrl))
-        catch
-          case _: Exception => stopAndDispose()
-
-      case (Some(_), Some(_)) =>
-        currentPlayer.get().foreach: player =>
-          val status = player.status.value
-          val targetDuration = Duration(relativeTimeSeconds * 1000.0)
-
+    val updatedMap = activeAudios.foldLeft(stillActiveMap): (acc, info) =>
+      acc.get(info.sourceUrl) match
+        case Some(existingPlayer) =>
           if isPlaying then
-            if status != MediaPlayer.Status.Playing.delegate then
-              player.seek(targetDuration)
-              player.play()
+            if existingPlayer.status.value != MediaPlayer.Status.Playing.delegate then
+              existingPlayer.seek(Duration(info.relativeTimeSeconds * 1000.0))
+              existingPlayer.play()
+            else
+              val currentTimeSec = existingPlayer.currentTime.value.toSeconds
+              if Math.abs(currentTimeSec - info.relativeTimeSeconds) > 0.3 then
+                existingPlayer.seek(Duration(info.relativeTimeSeconds * 1000.0))
           else
-            if status == MediaPlayer.Status.Playing.delegate then
-              player.pause()
-            player.seek(targetDuration)
+            existingPlayer.pause()
+            existingPlayer.seek(Duration(info.relativeTimeSeconds * 1000.0))
+          acc
 
-  def stop(): Unit =
-    stopAndDispose()
+        case None =>
+          try
+            val media = new Media(info.sourceUrl)
+            val newPlayer = new MediaPlayer(media)
+            newPlayer.startTime = Duration.Zero
+            newPlayer.seek(Duration(info.relativeTimeSeconds * 1000.0))
+            if isPlaying then newPlayer.play() else newPlayer.pause()
+            acc + (info.sourceUrl -> newPlayer)
+          catch
+            case _: Throwable => acc
 
-  private def stopAndDispose(): Unit =
-    currentPlayer.get().foreach: player =>
-      player.stop()
-      player.dispose()
-    currentPlayer.set(None)
-    currentUrl.set(None)
+    activePlayers.set(updatedMap)
+
+  def stopAll(): Unit =
+    val currentMap = activePlayers.getAndSet(Map.empty)
+    currentMap.values.foreach: player =>
+      try
+        player.stop()
+        player.dispose()
+      catch
+        case _: Throwable => ()

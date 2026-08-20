@@ -5,7 +5,7 @@ import scalafx.Includes.*
 import core.model.*
 import core.engine.*
 import app.view.TimelineView
-import app.view.components.SelectedClip
+import app.view.components.{ActiveAudioTrackInfo, SelectedClip}
 import scalafx.scene.layout.VBox
 import scalafx.animation.AnimationTimer
 import java.util.concurrent.atomic.AtomicReference
@@ -66,12 +66,12 @@ class TimelineController:
             syncMediaPlayback()
           else
             val prevVideo = getActiveVideoClip()
-            val prevAudio = getActiveAudioClip()
+            val prevAudios = getActiveAudioClips()
             state.set(current.copy(currentTime = updatedTime, lastFrameTimeNanos = now))
             view.updateTimelineTime(updatedTime)
 
             val currVideo = getActiveVideoClip()
-            val currAudio = getActiveAudioClip()
+            val currAudios = getActiveAudioClips()
 
             val hasDynamicEffect = currVideo.exists { c =>
               c.effect match
@@ -79,7 +79,7 @@ class TimelineController:
                 case _ => false
             }
 
-            if prevVideo != currVideo || prevAudio != currAudio || hasDynamicEffect then
+            if prevVideo != currVideo || prevAudios != currAudios || hasDynamicEffect then
               syncMediaPlayback()
         case Paused =>
           masterTimer.stop()
@@ -101,11 +101,10 @@ class TimelineController:
       .flatMap(_.clips)
       .find(_.containsTime(current.currentTime))
 
-  private def getActiveAudioClip(): Option[AudioClip] =
+  private def getActiveAudioClips(): List[AudioClip] =
     val current = state.get()
     current.timeline.audioTracks
-      .flatMap(_.clips)
-      .find(_.containsTime(current.currentTime))
+      .flatMap(_.clips.find(_.containsTime(current.currentTime)))
 
   private def syncMediaPlayback(): Unit =
     val current = state.get()
@@ -125,11 +124,13 @@ class TimelineController:
       case None =>
         view.updatePreview(None, 0.0, false, VideoEffect.None, 0.0)
 
-    getActiveAudioClip() match
-      case Some(clip) =>
-        view.updateAudio(Some(clip.sourceUrl), clip.relativeTimeAt(current.currentTime), isPlaying)
-      case None =>
-        view.updateAudio(None, 0.0, false)
+    val activeAudiosInfo = getActiveAudioClips().map: clip =>
+      ActiveAudioTrackInfo(
+        sourceUrl = clip.sourceUrl,
+        relativeTimeSeconds = clip.relativeTimeAt(current.currentTime)
+      )
+
+    view.updateAudio(activeAudiosInfo, isPlaying)
 
   private def totalTimelineDuration: Double =
     val current = state.get()

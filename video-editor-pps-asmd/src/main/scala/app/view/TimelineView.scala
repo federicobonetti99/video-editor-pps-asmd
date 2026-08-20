@@ -133,8 +133,8 @@ class TimelineView(
       onVideoTimeUpdated
     )
 
-  def updateAudio(audioUrlOpt: Option[String], relativeTimeSeconds: Double, isPlaying: Boolean): Unit =
-    audioPlayer.update(audioUrlOpt, relativeTimeSeconds, isPlaying)
+  def updateAudio(activeAudios: List[ActiveAudioTrackInfo], isPlaying: Boolean): Unit =
+    audioPlayer.update(activeAudios, isPlaying)
 
   def render(timeline: Timeline): Unit =
     currentTimelineProperty.value = Some(timeline)
