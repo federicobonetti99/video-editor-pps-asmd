@@ -8,6 +8,20 @@ case object Overwrite extends InsertionPolicy
 
 object TimelineEngine:
 
+  def addVideoTrack(timeline: Timeline): Timeline =
+    val nextId = if timeline.videoTracks.isEmpty then 1 else timeline.videoTracks.map(_.id).max + 1
+    timeline.copy(videoTracks = timeline.videoTracks :+ VideoTrack(id = nextId, clips = Nil))
+
+  def addAudioTrack(timeline: Timeline): Timeline =
+    val nextId = if timeline.audioTracks.isEmpty then 1 else timeline.audioTracks.map(_.id).max + 1
+    timeline.copy(audioTracks = timeline.audioTracks :+ AudioTrack(id = nextId, clips = Nil))
+
+  def removeVideoTrack(timeline: Timeline, trackId: Int): Timeline =
+    timeline.copy(videoTracks = timeline.videoTracks.filterNot(_.id == trackId))
+
+  def removeAudioTrack(timeline: Timeline, trackId: Int): Timeline =
+    timeline.copy(audioTracks = timeline.audioTracks.filterNot(_.id == trackId))
+
   def addVideoClip(timeline: Timeline, trackId: Int, clip: VideoClip): Timeline =
     addVideoClip(timeline, trackId, clip, InsertAndShift)
 
@@ -96,8 +110,67 @@ object TimelineEngine:
         }
         timeline.copy(audioTracks = updatedAudioTracks)
 
+  def moveClipToTrack[C <: MediaClip](
+                                       timeline: Timeline,
+                                       target: C,
+                                       targetTrackId: Int,
+                                       newStartTime: Double
+                                     ): Timeline =
+    val safeStartTime = Math.max(0.0, newStartTime)
+    val targetEndTime = safeStartTime + target.duration
+
+    def hasOverlap(other: MediaClip): Boolean =
+      val otherEndTime = other.startTime + other.duration
+      Math.max(safeStartTime, other.startTime) < Math.min(targetEndTime, otherEndTime)
+
+    target match
+      case v: VideoClip =>
+        val targetTrackOpt = timeline.videoTracks.find(_.id == targetTrackId)
+        targetTrackOpt match
+          case Some(destTrack) =>
+            val isSameTrack = destTrack.clips.exists(_.isSameAs(v))
+            val otherClipsInDest = if isSameTrack then destTrack.clips.filterNot(_.isSameAs(v)) else destTrack.clips
+            if otherClipsInDest.exists(hasOverlap) then timeline
+            else
+              val updatedSourceTracks = timeline.videoTracks.map { track =>
+                if track.id == targetTrackId then
+                  val cleanClips = track.clips.filterNot(_.isSameAs(v))
+                  val updatedTarget = v.withTimes(safeStartTime, v.trimStart, v.duration).asInstanceOf[VideoClip]
+                  track.copy(clips = (updatedTarget :: cleanClips).sortBy(_.startTime))
+                else
+                  track.copy(clips = track.clips.filterNot(_.isSameAs(v)))
+              }
+              timeline.copy(videoTracks = updatedSourceTracks)
+          case None => timeline
+
+      case a: AudioClip =>
+        val targetTrackOpt = timeline.audioTracks.find(_.id == targetTrackId)
+        targetTrackOpt match
+          case Some(destTrack) =>
+            val isSameTrack = destTrack.clips.exists(_.isSameAs(a))
+            val otherClipsInDest = if isSameTrack then destTrack.clips.filterNot(_.isSameAs(a)) else destTrack.clips
+            if otherClipsInDest.exists(hasOverlap) then timeline
+            else
+              val updatedSourceTracks = timeline.audioTracks.map { track =>
+                if track.id == targetTrackId then
+                  val cleanClips = track.clips.filterNot(_.isSameAs(a))
+                  val updatedTarget = a.withTimes(safeStartTime, a.trimStart, a.duration).asInstanceOf[AudioClip]
+                  track.copy(clips = (updatedTarget :: cleanClips).sortBy(_.startTime))
+                else
+                  track.copy(clips = track.clips.filterNot(_.isSameAs(a)))
+              }
+              timeline.copy(audioTracks = updatedSourceTracks)
+          case None => timeline
+
   def getVideoClipsAtTime(timeline: Timeline, timestamp: Double): List[VideoClip] =
     timeline.videoTracks.flatMap { track =>
+      track.clips.filter { clip =>
+        timestamp >= clip.startTime && timestamp < (clip.startTime + clip.duration)
+      }
+    }
+
+  def getAudioClipsAtTime(timeline: Timeline, timestamp: Double): List[AudioClip] =
+    timeline.audioTracks.flatMap { track =>
       track.clips.filter { clip =>
         timestamp >= clip.startTime && timestamp < (clip.startTime + clip.duration)
       }

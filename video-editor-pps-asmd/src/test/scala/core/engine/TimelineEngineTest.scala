@@ -311,3 +311,73 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     clips(0).startTime shouldBe 0.0
     clips(1).startTime shouldBe 10.0
   }
+
+  test("Dynamically add video and audio tracks with auto-incrementing IDs") {
+    val t0 = Timeline(videoTracks = Nil, audioTracks = Nil)
+    val t1 = TimelineEngine.addVideoTrack(t0)
+    val t2 = TimelineEngine.addVideoTrack(t1)
+    val t3 = TimelineEngine.addAudioTrack(t2)
+
+    t3.videoTracks.map(_.id) shouldBe List(1, 2)
+    t3.audioTracks.map(_.id) shouldBe List(1)
+  }
+
+  test("Remove a specific video track and keep the others untouched") {
+    val t0 = Timeline(
+      videoTracks = List(VideoTrack(1, Nil), VideoTrack(2, List(sampleClip)), VideoTrack(3, Nil)),
+      audioTracks = Nil
+    )
+    val updated = TimelineEngine.removeVideoTrack(t0, trackId = 2)
+
+    updated.videoTracks.map(_.id) shouldBe List(1, 3)
+    updated.videoTracks.flatMap(_.clips) shouldBe empty
+  }
+
+  test("Retrieve all audio clips active at a specific timestamp across multiple audio tracks") {
+    val clip1 = AudioClip("a1.mp3", startTime = 0.0, trimStart = 0.0, duration = 10.0, sourceLength = 20.0, volumePoints = Nil)
+    val clip2 = AudioClip("a2.mp3", startTime = 5.0, trimStart = 0.0, duration = 10.0, sourceLength = 20.0, volumePoints = Nil)
+
+    val timeline = Timeline(
+      videoTracks = Nil,
+      audioTracks = List(
+        AudioTrack(1, List(clip1)),
+        AudioTrack(2, List(clip2))
+      )
+    )
+
+    // At t = 2.0 only clip1 is playing
+    TimelineEngine.getAudioClipsAtTime(timeline, timestamp = 2.0) shouldBe List(clip1)
+
+    // At t = 7.0 both clips overlap on different tracks
+    val activeAtSeven = TimelineEngine.getAudioClipsAtTime(timeline, timestamp = 7.0)
+    activeAtSeven should have size 2
+    activeAtSeven should contain allOf(clip1, clip2)
+  }
+
+  test("moveClipToTrack should transfer a video clip to another track if there are no overlaps") {
+    val track1 = VideoTrack(1, List(sampleClip))
+    val track2 = VideoTrack(2, Nil)
+    val timeline = Timeline(videoTracks = List(track1, track2), audioTracks = Nil)
+
+    val updated = TimelineEngine.moveClipToTrack(timeline, target = sampleClip, targetTrackId = 2, newStartTime = 15.0)
+
+    updated.videoTracks.find(_.id == 1).get.clips shouldBe empty
+    val destClips = updated.videoTracks.find(_.id == 2).get.clips
+    destClips should have size 1
+    destClips.head.sourceUrl shouldBe sampleClip.sourceUrl
+    destClips.head.startTime shouldBe 15.0
+  }
+
+  test("moveClipToTrack should reject move if destination track has an overlapping clip") {
+    val obstacleClip = VideoClip("obs.mp4", startTime = 10.0, trimStart = 0.0, duration = 5.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val track1 = VideoTrack(1, List(sampleClip)) // 0.0 to 10.0
+    val track2 = VideoTrack(2, List(obstacleClip)) // 10.0 to 15.0
+    val timeline = Timeline(videoTracks = List(track1, track2), audioTracks = Nil)
+
+    // Try moving sampleClip to track 2 at startTime 12.0 (overlaps obstacleClip 10.0-15.0)
+    val updated = TimelineEngine.moveClipToTrack(timeline, target = sampleClip, targetTrackId = 2, newStartTime = 12.0)
+
+    // Track 1 should still have sampleClip and track 2 should still have obstacleClip untouched
+    updated.videoTracks.find(_.id == 1).get.clips shouldBe List(sampleClip)
+    updated.videoTracks.find(_.id == 2).get.clips shouldBe List(obstacleClip)
+  }
