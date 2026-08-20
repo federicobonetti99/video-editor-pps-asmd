@@ -2,7 +2,7 @@ package app.view
 
 import scalafx.Includes.*
 import scalafx.application.Platform
-import scalafx.scene.control.Slider
+import scalafx.scene.control.{ScrollPane, Slider}
 import scalafx.scene.layout.VBox
 import scalafx.beans.property.ObjectProperty
 import core.model.*
@@ -37,6 +37,16 @@ class TimelineView(
     onAudioClipMoved = (clip, newTime) => onClipMoved(clip, newTime)
   )
 
+  private val timelineScrollPane = new ScrollPane:
+    content = timelinePanel
+    prefHeight = 200
+    minHeight = 150
+    fitToWidth = false
+    fitToHeight = false
+    hbarPolicy = ScrollPane.ScrollBarPolicy.AsNeeded
+    vbarPolicy = ScrollPane.ScrollBarPolicy.AsNeeded
+    style = "-fx-background: #1e1e1e; -fx-border-color: #333333; -fx-border-width: 1px;"
+
   private val timeSlider = new Slider:
     min = 0.0
     max = 60.0
@@ -54,7 +64,7 @@ class TimelineView(
     onEffectSelected = effect => onEffectSelected(effect)
   )
 
-  children = Seq(preview, timeSlider, timelinePanel, toolbar)
+  children = Seq(preview, timeSlider, timelineScrollPane, toolbar)
 
   timeSlider.valueProperty.addListener: (_, _, newValue) =>
     val seconds = newValue.doubleValue()
@@ -71,8 +81,12 @@ class TimelineView(
   def selectClip(targetOpt: Option[SelectedClip]): Unit =
     selectedClipProperty.value = targetOpt
     targetOpt match
-      case Some(SelectedClip.SelectedVideo(v)) => toolbar.setSelectedEffect(v.effect)
-      case _                                  => toolbar.setSelectedEffect(VideoEffect.None)
+      case Some(SelectedClip.SelectedVideo(v)) =>
+        toolbar.setSelectedEffect(v.effect)
+        toolbar.setEffectControlsVisible(true)
+      case _ =>
+        toolbar.setSelectedEffect(VideoEffect.None)
+        toolbar.setEffectControlsVisible(false)
     onClipSelected(targetOpt)
     currentTimelineProperty.value.foreach(render)
 
@@ -119,4 +133,10 @@ class TimelineView(
 
   def render(timeline: Timeline): Unit =
     currentTimelineProperty.value = Some(timeline)
+    val maxDuration = {
+      val maxV = timeline.videoTracks.flatMap(_.clips).map(_.endTime).maxOption.getOrElse(0.0)
+      val maxA = timeline.audioTracks.flatMap(_.clips).map(_.endTime).maxOption.getOrElse(0.0)
+      Math.max(maxV, maxA)
+    }
+    timeSlider.max = Math.max(60.0, maxDuration)
     timelinePanel.draw(timeline, timeSlider.value.value, selectedClipProperty.value)

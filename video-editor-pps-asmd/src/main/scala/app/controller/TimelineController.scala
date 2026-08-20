@@ -13,7 +13,8 @@ import java.util.concurrent.atomic.AtomicReference
 private case class ControllerState(
                                     timeline: Timeline,
                                     currentTime: Double = 0.0,
-                                    playerState: PlayerState = Paused
+                                    playerState: PlayerState = Paused,
+                                    lastFrameTimeNanos: Long = 0L
                                   )
 
 class TimelineController:
@@ -47,27 +48,24 @@ class TimelineController:
 
   view.onKeyReleased = (event: scalafx.scene.input.KeyEvent) => inputHandler.handleKeyEvent(event)
 
-  private var lastFrameTimeNanos: Long = 0L
-
   private val masterTimer: AnimationTimer = AnimationTimer: now =>
-    if lastFrameTimeNanos > 0L then
-      val deltaSeconds = (now - lastFrameTimeNanos) / 1e9
-      val current = state.get()
+    val current = state.get()
+    if current.lastFrameTimeNanos > 0L then
+      val deltaSeconds = (now - current.lastFrameTimeNanos) / 1e9
       current.playerState match
         case Playing(speed) =>
           val updatedTime = current.currentTime + (deltaSeconds * speed)
           val totalDuration = totalTimelineDuration
 
           if totalDuration > 0.0 && updatedTime >= totalDuration then
-            state.set(current.copy(currentTime = totalDuration, playerState = Paused))
+            state.set(current.copy(currentTime = totalDuration, playerState = Paused, lastFrameTimeNanos = 0L))
             view.updateTimelineTime(totalDuration)
             masterTimer.stop()
-            lastFrameTimeNanos = 0L
             syncMediaPlayback()
           else
             val prevVideo = getActiveVideoClip()
             val prevAudio = getActiveAudioClip()
-            state.set(current.copy(currentTime = updatedTime))
+            state.set(current.copy(currentTime = updatedTime, lastFrameTimeNanos = now))
             view.updateTimelineTime(updatedTime)
 
             val currVideo = getActiveVideoClip()
@@ -83,8 +81,9 @@ class TimelineController:
               syncMediaPlayback()
         case Paused =>
           masterTimer.stop()
-          lastFrameTimeNanos = 0L
-    lastFrameTimeNanos = now
+          state.set(current.copy(lastFrameTimeNanos = 0L))
+    else
+      state.set(current.copy(lastFrameTimeNanos = now))
 
   private def findVideoTrack(id: Int): Option[VideoTrack] =
     state.get().timeline.videoTracks.find(_.id == id)
@@ -146,15 +145,13 @@ class TimelineController:
       case Paused     => Playing(speed = 1.0)
       case Playing(_) => Paused
 
-    state.set(current.copy(currentTime = targetTime, playerState = nextState))
+    state.set(current.copy(currentTime = targetTime, playerState = nextState, lastFrameTimeNanos = 0L))
 
     nextState match
       case Playing(_) =>
-        lastFrameTimeNanos = 0L
         masterTimer.start()
       case Paused =>
         masterTimer.stop()
-        lastFrameTimeNanos = 0L
 
     syncMediaPlayback()
 

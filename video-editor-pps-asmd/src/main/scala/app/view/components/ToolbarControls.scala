@@ -5,6 +5,7 @@ import scalafx.collections.ObservableBuffer
 import scalafx.geometry.Pos
 import scalafx.scene.control.{Button, ComboBox, Label}
 import scalafx.scene.layout.HBox
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ToolbarControls(
                        onImport: () => Unit,
@@ -55,16 +56,21 @@ class ToolbarControls(
     "FadeIn"     -> VideoEffect.FadeIn(1.0)
   )
 
-  private var isUpdatingUi = false
+  private val isUpdatingUi = new AtomicBoolean(false)
 
   private val effectComboBox = new ComboBox[String](ObservableBuffer(effectOptions.map(_._1)*)):
     focusTraversable = false
     value = "None"
     onAction = _ =>
-      if !isUpdatingUi && value.value != null then
+      if !isUpdatingUi.get() && value.value != null then
         effectOptions.find(_._1 == value.value).foreach { case (_, eff) =>
           onEffectSelected(eff)
         }
+
+  effectLabel.visible = false
+  effectLabel.managed = false
+  effectComboBox.visible = false
+  effectComboBox.managed = false
 
   children = Seq(
     importButton,
@@ -85,7 +91,7 @@ class ToolbarControls(
     timeLabel.text = f"$minutes%02d:$remSeconds%02d.$millis%03d"
 
   def setSelectedEffect(effect: VideoEffect): Unit =
-    isUpdatingUi = true
+    isUpdatingUi.set(true)
     val name = effect match
       case VideoEffect.None          => "None"
       case VideoEffect.Grayscale     => "Grayscale"
@@ -96,4 +102,10 @@ class ToolbarControls(
       case VideoEffect.Shake(_, _)   => "Shake"
       case VideoEffect.FadeIn(_)     => "FadeIn"
     effectComboBox.value = name
-    isUpdatingUi = false
+    isUpdatingUi.set(false)
+
+  def setEffectControlsVisible(isVisible: Boolean): Unit =
+    effectLabel.visible = isVisible
+    effectLabel.managed = isVisible
+    effectComboBox.visible = isVisible
+    effectComboBox.managed = isVisible

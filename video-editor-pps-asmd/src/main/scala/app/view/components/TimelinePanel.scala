@@ -26,22 +26,47 @@ class TimelinePanel(
                      val onAudioClipMoved: (AudioClip, Double) => Unit = (_, _) => ()
                    ) extends Pane:
 
-  prefHeight = 250
-  prefWidth = 2000
-  style = "-fx-background-color: #222222;"
+  private val trackSpacing = 8.0
+  private val headerMargin = 15.0
+  private val trackLabelWidth = 50.0
 
-  var onClipSelected: (String, Int, Int) => Unit = (_, _, _) => ()
+  style = "-fx-background-color: #1e1e1e;"
 
   private val playheadLine = new Line:
     startY = 0
-    endY = 200
+    endY = 250
     stroke = Color.Red
     strokeWidth = 2
 
   def updatePlayhead(seconds: Double): Unit =
-    val xPos = seconds * pixelsPerSecond
+    val xPos = trackLabelWidth + (seconds * pixelsPerSecond)
     playheadLine.startX = xPos
     playheadLine.endX = xPos
+
+  private def renderTrackBackground(trackName: String, yPos: Double, totalWidth: Double, isAudio: Boolean): Seq[Node] =
+    val trackBg = new Rectangle:
+      x = 0
+      y = yPos
+      width = totalWidth
+      height = trackHeight
+      fill = if isAudio then Color.web("#252822") else Color.web("#22262b")
+      stroke = Color.web("#333333")
+      strokeWidth = 1.0
+
+    val trackLabelBg = new Rectangle:
+      x = 0
+      y = yPos
+      width = trackLabelWidth
+      height = trackHeight
+      fill = if isAudio then Color.web("#2d4a2d") else Color.web("#243b55")
+
+    val trackLabel = new Label:
+      text = trackName
+      layoutX = 12
+      layoutY = yPos + (trackHeight / 2) - 8
+      style = "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 11px;"
+
+    Seq(trackBg, trackLabelBg, trackLabel)
 
   private def renderClipNodes[C <: MediaClip](
                                                mediaClip: C,
@@ -51,7 +76,7 @@ class TimelinePanel(
                                                onClick: C => Unit,
                                                onMove: (C, Double) => Unit
                                              ): Seq[Node] =
-    val initialX = mediaClip.startTime * pixelsPerSecond
+    val initialX = trackLabelWidth + (mediaClip.startTime * pixelsPerSecond)
     val dragStartX = new AtomicReference[Double](0.0)
     val hasDragged = new AtomicReference[Boolean](false)
 
@@ -62,15 +87,15 @@ class TimelinePanel(
       height = trackHeight
       fill = fillColor
       stroke = if isSelected then Color.Yellow else Color.White
-      strokeWidth = if isSelected then 4.0 else 2.0
-      arcWidth = 8
-      arcHeight = 8
+      strokeWidth = if isSelected then 3.0 else 1.5
+      arcWidth = 6
+      arcHeight = 6
       cursor = Cursor.Hand
 
     val clipLabel = new Label:
       text = new File(mediaClip.sourceUrl).getName
       layoutX = initialX + 5
-      layoutY = yPos + 12
+      layoutY = yPos + 14
       style = "-fx-text-fill: black; -fx-font-weight: bold; -fx-font-size: 11px;"
       maxWidth = (mediaClip.duration * pixelsPerSecond) - 10
       cursor = Cursor.Hand
@@ -84,15 +109,15 @@ class TimelinePanel(
       val deltaX = event.sceneX - dragStartX.get()
       if Math.abs(deltaX) > 2.0 then
         hasDragged.set(true)
-        val clampedDeltaX = Math.max(-initialX, deltaX)
+        val clampedDeltaX = Math.max(-(initialX - trackLabelWidth), deltaX)
         clipRectangle.translateX = clampedDeltaX
         clipLabel.translateX = clampedDeltaX
       event.consume()
 
     val handleMouseReleased: scalafx.scene.input.MouseEvent => Unit = event =>
       if hasDragged.get() then
-        val finalX = Math.max(0.0, initialX + clipRectangle.translateX.value)
-        val newStartTime = finalX / pixelsPerSecond
+        val finalX = Math.max(trackLabelWidth, initialX + clipRectangle.translateX.value)
+        val newStartTime = (finalX - trackLabelWidth) / pixelsPerSecond
         onMove(mediaClip, newStartTime)
       else
         onClick(mediaClip)
@@ -110,36 +135,59 @@ class TimelinePanel(
 
   def draw(timeline: Timeline, currentCursorTime: Double, selectedClip: Option[SelectedClip] = None): Unit =
     Platform.runLater:
-      val baseVideoY = 20.0
-      val trackSpacing = 10.0
+      val maxDuration = {
+        val maxV = timeline.videoTracks.flatMap(_.clips).map(_.endTime).maxOption.getOrElse(0.0)
+        val maxA = timeline.audioTracks.flatMap(_.clips).map(_.endTime).maxOption.getOrElse(0.0)
+        Math.max(maxV, maxA)
+      }
 
-      val videoNodes = timeline.videoTracks.zipWithIndex.flatMap: (track, trackIndex) =>
-        val trackY = baseVideoY + trackIndex * (trackHeight + trackSpacing)
+      val calculatedWidth = Math.max(2000.0, trackLabelWidth + (maxDuration * pixelsPerSecond) + 300.0)
+      prefWidth = calculatedWidth
+
+      val baseVideoY = headerMargin
+      val videoTracksMeta = timeline.videoTracks.zipWithIndex.map: (track, index) =>
+        (track, baseVideoY + index * (trackHeight + trackSpacing))
+
+      val videoBgNodes = videoTracksMeta.flatMap: (track, yPos) =>
+        renderTrackBackground(s"V${track.id}", yPos, calculatedWidth, isAudio = false)
+
+      val videoClipNodes = videoTracksMeta.flatMap: (track, yPos) =>
         track.clips.flatMap: videoClip =>
           val isSelected = selectedClip.exists:
             case SelectedClip.SelectedVideo(v) => videoClip.isSameAs(v)
             case _                             => false
-          renderClipNodes(videoClip, trackY, Color.DeepSkyBlue, isSelected, onVideoClipClicked, onVideoClipMoved)
+          renderClipNodes(videoClip, yPos, Color.DeepSkyBlue, isSelected, onVideoClipClicked, onVideoClipMoved)
 
-      val videoSectionHeight = baseVideoY + timeline.videoTracks.size * (trackHeight + trackSpacing)
-      val separatorYPos = videoSectionHeight + 5.0
+      val videoTotalHeight = baseVideoY + (timeline.videoTracks.size * (trackHeight + trackSpacing))
+      val separatorYPos = videoTotalHeight + 4.0
+
       val separatorLine = new Line:
         startX = 0
         startY = separatorYPos
-        endX = 2000
+        endX = calculatedWidth
         endY = separatorYPos
-        stroke = Color.web("#7f8c8d")
-        strokeWidth = 1
-        strokeDashArray.addAll(5.0, 5.0)
+        stroke = Color.web("#555555")
+        strokeWidth = 2
+        strokeDashArray.addAll(6.0, 4.0)
 
-      val baseAudioY = separatorYPos + 15.0
-      val audioNodes = timeline.audioTracks.zipWithIndex.flatMap: (track, trackIndex) =>
-        val trackY = baseAudioY + trackIndex * (trackHeight + trackSpacing)
+      val baseAudioY = separatorYPos + 12.0
+      val audioTracksMeta = timeline.audioTracks.zipWithIndex.map: (track, index) =>
+        (track, baseAudioY + index * (trackHeight + trackSpacing))
+
+      val audioBgNodes = audioTracksMeta.flatMap: (track, yPos) =>
+        renderTrackBackground(s"A${track.id}", yPos, calculatedWidth, isAudio = true)
+
+      val audioClipNodes = audioTracksMeta.flatMap: (track, yPos) =>
         track.clips.flatMap: audioClip =>
           val isSelected = selectedClip.exists:
             case SelectedClip.SelectedAudio(a) => audioClip.isSameAs(a)
             case _                             => false
-          renderClipNodes(audioClip, trackY, Color.LightGreen, isSelected, onAudioClipClicked, onAudioClipMoved)
+          renderClipNodes(audioClip, yPos, Color.LightGreen, isSelected, onAudioClipClicked, onAudioClipMoved)
 
-      children = Seq(playheadLine) ++ videoNodes ++ Seq(separatorLine) ++ audioNodes
+      val totalHeight = baseAudioY + (timeline.audioTracks.size * (trackHeight + trackSpacing)) + 30.0
+      prefHeight = Math.max(220.0, totalHeight)
+
+      playheadLine.endY = prefHeight.value
+
+      children = Seq(playheadLine) ++ videoBgNodes ++ videoClipNodes ++ Seq(separatorLine) ++ audioBgNodes ++ audioClipNodes
       updatePlayhead(currentCursorTime)
