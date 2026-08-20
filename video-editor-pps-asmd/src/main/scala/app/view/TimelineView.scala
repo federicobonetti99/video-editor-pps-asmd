@@ -17,8 +17,10 @@ class TimelineView(
                     val onImportRequested: () => Unit = () => (),
                     val onVideoTimeUpdated: Double => Unit = _ => (),
                     val onClipSelected: Option[SelectedClip] => Unit = _ => (),
-                    val onClipMoved: (MediaClip, Double) => Unit = (_, _) => (),
-                    val onEffectSelected: VideoEffect => Unit = _ => ()
+                    val onClipMoved: (MediaClip, Int, Double) => Unit = (_, _, _) => (),
+                    val onEffectSelected: VideoEffect => Unit = _ => (),
+                    val onAddVideoTrackRequested: () => Unit = () => (),
+                    val onAddAudioTrackRequested: () => Unit = () => ()
                   ) extends VBox:
 
   spacing = 15
@@ -31,10 +33,10 @@ class TimelineView(
   private val audioPlayer = new AudioPlayer()
 
   private val timelinePanel = new TimelinePanel(
-    onVideoClipClicked = clip => toggleVideoSelection(clip),
-    onAudioClipClicked = clip => toggleAudioSelection(clip),
-    onVideoClipMoved = (clip, newTime) => onClipMoved(clip, newTime),
-    onAudioClipMoved = (clip, newTime) => onClipMoved(clip, newTime)
+    onVideoClipClicked = (trackId, clip) => toggleVideoSelection(trackId, clip),
+    onAudioClipClicked = (trackId, clip) => toggleAudioSelection(trackId, clip),
+    onVideoClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime),
+    onAudioClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime)
   )
 
   private val timelineScrollPane = new ScrollPane:
@@ -60,6 +62,8 @@ class TimelineView(
     onDelete = () => onDeleteRequested(),
     onCut    = () => onCutRequested(timeSlider.value.value),
     onSnap   = () => onSnapRequested(),
+    onAddVideoTrack = () => onAddVideoTrackRequested(),
+    onAddAudioTrack = () => onAddAudioTrackRequested(),
     onPlay   = () => onTogglePlaybackRequested(),
     onEffectSelected = effect => onEffectSelected(effect)
   )
@@ -81,30 +85,31 @@ class TimelineView(
   def selectClip(targetOpt: Option[SelectedClip]): Unit =
     selectedClipProperty.value = targetOpt
     targetOpt match
-      case Some(SelectedClip.SelectedVideo(v)) =>
+      case Some(SelectedClip.SelectedVideo(_, v)) =>
         toolbar.setSelectedEffect(v.effect)
         toolbar.setEffectControlsVisible(true)
       case _ =>
         toolbar.setSelectedEffect(VideoEffect.None)
         toolbar.setEffectControlsVisible(false)
+
     onClipSelected(targetOpt)
     currentTimelineProperty.value.foreach(render)
 
-  def toggleVideoSelection(clip: VideoClip): Unit =
+  def toggleVideoSelection(trackId: Int, clip: VideoClip): Unit =
     val isAlreadySelected = selectedClipProperty.value.exists:
-      case SelectedClip.SelectedVideo(v) => clip.isSameAs(v)
-      case _                             => false
+      case SelectedClip.SelectedVideo(tid, v) => tid == trackId && clip.isSameAs(v)
+      case _                                  => false
 
     if isAlreadySelected then selectClip(None)
-    else selectClip(Some(SelectedClip.SelectedVideo(clip)))
+    else selectClip(Some(SelectedClip.SelectedVideo(trackId, clip)))
 
-  def toggleAudioSelection(clip: AudioClip): Unit =
+  def toggleAudioSelection(trackId: Int, clip: AudioClip): Unit =
     val isAlreadySelected = selectedClipProperty.value.exists:
-      case SelectedClip.SelectedAudio(a) => clip.isSameAs(a)
-      case _                             => false
+      case SelectedClip.SelectedAudio(tid, a) => tid == trackId && clip.isSameAs(a)
+      case _                                  => false
 
     if isAlreadySelected then selectClip(None)
-    else selectClip(Some(SelectedClip.SelectedAudio(clip)))
+    else selectClip(Some(SelectedClip.SelectedAudio(trackId, clip)))
 
   def updateTimelineTime(seconds: Double): Unit =
     Platform.runLater:

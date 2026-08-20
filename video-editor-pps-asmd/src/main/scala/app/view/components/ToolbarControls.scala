@@ -13,6 +13,8 @@ class ToolbarControls(
                        onCut: () => Unit,
                        onSnap: () => Unit,
                        onPlay: () => Unit,
+                       onAddVideoTrack: () => Unit,
+                       onAddAudioTrack: () => Unit,
                        onEffectSelected: VideoEffect => Unit
                      ) extends HBox:
 
@@ -34,6 +36,16 @@ class ToolbarControls(
   private val snapButton = new Button("Snap"):
     focusTraversable = false
     onAction = _ => onSnap()
+
+  private val addVideoTrackButton = new Button("+ Video"):
+    focusTraversable = false
+    style = "-fx-background-color: #243b55; -fx-text-fill: white; -fx-font-weight: bold;"
+    onAction = _ => onAddVideoTrack()
+
+  private val addAudioTrackButton = new Button("+ Audio"):
+    focusTraversable = false
+    style = "-fx-background-color: #2d4a2d; -fx-text-fill: white; -fx-font-weight: bold;"
+    onAction = _ => onAddAudioTrack()
 
   private val playButton = new Button("Play/Pause"):
     focusTraversable = false
@@ -77,6 +89,8 @@ class ToolbarControls(
     deleteButton,
     cutButton,
     snapButton,
+    addVideoTrackButton,
+    addAudioTrackButton,
     playButton,
     timeLabel,
     effectLabel,

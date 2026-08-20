@@ -14,16 +14,16 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
 enum SelectedClip:
-  case SelectedVideo(clip: VideoClip)
-  case SelectedAudio(clip: AudioClip)
+  case SelectedVideo(trackId: Int, clip: VideoClip)
+  case SelectedAudio(trackId: Int, clip: AudioClip)
 
 class TimelinePanel(
                      pixelsPerSecond: Double = 20.0,
                      trackHeight: Double = 50.0,
-                     val onVideoClipClicked: VideoClip => Unit = _ => (),
-                     val onAudioClipClicked: AudioClip => Unit = _ => (),
-                     val onVideoClipMoved: (VideoClip, Double) => Unit = (_, _) => (),
-                     val onAudioClipMoved: (AudioClip, Double) => Unit = (_, _) => ()
+                     val onVideoClipClicked: (Int, VideoClip) => Unit = (_, _) => (),
+                     val onAudioClipClicked: (Int, AudioClip) => Unit = (_, _) => (),
+                     val onVideoClipMoved: (VideoClip, Int, Double) => Unit = (_, _, _) => (),
+                     val onAudioClipMoved: (AudioClip, Int, Double) => Unit = (_, _, _) => ()
                    ) extends Pane:
 
   private val trackSpacing = 8.0
@@ -70,14 +70,17 @@ class TimelinePanel(
 
   private def renderClipNodes[C <: MediaClip](
                                                mediaClip: C,
+                                               sourceTrackId: Int,
                                                yPos: Double,
                                                fillColor: Color,
                                                isSelected: Boolean,
-                                               onClick: C => Unit,
-                                               onMove: (C, Double) => Unit
+                                               tracksMeta: List[(Int, Double)],
+                                               onClick: (Int, C) => Unit,
+                                               onMove: (C, Int, Double) => Unit
                                              ): Seq[Node] =
     val initialX = trackLabelWidth + (mediaClip.startTime * pixelsPerSecond)
     val dragStartX = new AtomicReference[Double](0.0)
+    val dragStartY = new AtomicReference[Double](0.0)
     val hasDragged = new AtomicReference[Boolean](false)
 
     val clipRectangle = new Rectangle:
@@ -102,25 +105,35 @@ class TimelinePanel(
 
     val handleMousePressed: scalafx.scene.input.MouseEvent => Unit = event =>
       dragStartX.set(event.sceneX)
+      dragStartY.set(event.sceneY)
       hasDragged.set(false)
       event.consume()
 
     val handleMouseDragged: scalafx.scene.input.MouseEvent => Unit = event =>
       val deltaX = event.sceneX - dragStartX.get()
-      if Math.abs(deltaX) > 2.0 then
+      val deltaY = event.sceneY - dragStartY.get()
+      if Math.abs(deltaX) > 2.0 || Math.abs(deltaY) > 2.0 then
         hasDragged.set(true)
         val clampedDeltaX = Math.max(-(initialX - trackLabelWidth), deltaX)
         clipRectangle.translateX = clampedDeltaX
         clipLabel.translateX = clampedDeltaX
+        clipRectangle.translateY = deltaY
+        clipLabel.translateY = deltaY
       event.consume()
 
     val handleMouseReleased: scalafx.scene.input.MouseEvent => Unit = event =>
       if hasDragged.get() then
         val finalX = Math.max(trackLabelWidth, initialX + clipRectangle.translateX.value)
         val newStartTime = (finalX - trackLabelWidth) / pixelsPerSecond
-        onMove(mediaClip, newStartTime)
+        val currentLocalCenterY = yPos + clipRectangle.translateY.value + (trackHeight / 2.0)
+        val targetTrackId = tracksMeta
+          .minByOption(t => Math.abs(currentLocalCenterY - (t._2 + trackHeight / 2.0)))
+          .map(_._1)
+          .getOrElse(sourceTrackId)
+
+        onMove(mediaClip, targetTrackId, newStartTime)
       else
-        onClick(mediaClip)
+        onClick(sourceTrackId, mediaClip)
       event.consume()
 
     clipRectangle.onMousePressed = handleMousePressed
@@ -144,21 +157,33 @@ class TimelinePanel(
       val calculatedWidth = Math.max(2000.0, trackLabelWidth + (maxDuration * pixelsPerSecond) + 300.0)
       prefWidth = calculatedWidth
 
+      val orderedVideoTracks = timeline.videoTracks.sortBy(_.id).reverse
+      val orderedAudioTracks = timeline.audioTracks.sortBy(_.id)
+
       val baseVideoY = headerMargin
-      val videoTracksMeta = timeline.videoTracks.zipWithIndex.map: (track, index) =>
-        (track, baseVideoY + index * (trackHeight + trackSpacing))
+      val videoTracksMeta = orderedVideoTracks.zipWithIndex.map: (track, index) =>
+        (track.id, baseVideoY + index * (trackHeight + trackSpacing))
 
-      val videoBgNodes = videoTracksMeta.flatMap: (track, yPos) =>
-        renderTrackBackground(s"V${track.id}", yPos, calculatedWidth, isAudio = false)
+      val videoBgNodes = orderedVideoTracks.zip(videoTracksMeta).flatMap: (track, meta) =>
+        renderTrackBackground(s"V${track.id}", meta._2, calculatedWidth, isAudio = false)
 
-      val videoClipNodes = videoTracksMeta.flatMap: (track, yPos) =>
+      val videoClipNodes = orderedVideoTracks.zip(videoTracksMeta).flatMap: (track, meta) =>
         track.clips.flatMap: videoClip =>
           val isSelected = selectedClip.exists:
-            case SelectedClip.SelectedVideo(v) => videoClip.isSameAs(v)
-            case _                             => false
-          renderClipNodes(videoClip, yPos, Color.DeepSkyBlue, isSelected, onVideoClipClicked, onVideoClipMoved)
+            case SelectedClip.SelectedVideo(tid, v) => tid == track.id && videoClip.isSameAs(v)
+            case _                                  => false
+          renderClipNodes(
+            videoClip,
+            track.id,
+            meta._2,
+            Color.DeepSkyBlue,
+            isSelected,
+            videoTracksMeta,
+            onVideoClipClicked,
+            onVideoClipMoved
+          )
 
-      val videoTotalHeight = baseVideoY + (timeline.videoTracks.size * (trackHeight + trackSpacing))
+      val videoTotalHeight = baseVideoY + (orderedVideoTracks.size * (trackHeight + trackSpacing))
       val separatorYPos = videoTotalHeight + 4.0
 
       val separatorLine = new Line:
@@ -171,20 +196,29 @@ class TimelinePanel(
         strokeDashArray.addAll(6.0, 4.0)
 
       val baseAudioY = separatorYPos + 12.0
-      val audioTracksMeta = timeline.audioTracks.zipWithIndex.map: (track, index) =>
-        (track, baseAudioY + index * (trackHeight + trackSpacing))
+      val audioTracksMeta = orderedAudioTracks.zipWithIndex.map: (track, index) =>
+        (track.id, baseAudioY + index * (trackHeight + trackSpacing))
 
-      val audioBgNodes = audioTracksMeta.flatMap: (track, yPos) =>
-        renderTrackBackground(s"A${track.id}", yPos, calculatedWidth, isAudio = true)
+      val audioBgNodes = orderedAudioTracks.zip(audioTracksMeta).flatMap: (track, meta) =>
+        renderTrackBackground(s"A${track.id}", meta._2, calculatedWidth, isAudio = true)
 
-      val audioClipNodes = audioTracksMeta.flatMap: (track, yPos) =>
+      val audioClipNodes = orderedAudioTracks.zip(audioTracksMeta).flatMap: (track, meta) =>
         track.clips.flatMap: audioClip =>
           val isSelected = selectedClip.exists:
-            case SelectedClip.SelectedAudio(a) => audioClip.isSameAs(a)
-            case _                             => false
-          renderClipNodes(audioClip, yPos, Color.LightGreen, isSelected, onAudioClipClicked, onAudioClipMoved)
+            case SelectedClip.SelectedAudio(tid, a) => tid == track.id && audioClip.isSameAs(a)
+            case _                                  => false
+          renderClipNodes(
+            audioClip,
+            track.id,
+            meta._2,
+            Color.LightGreen,
+            isSelected,
+            audioTracksMeta,
+            onAudioClipClicked,
+            onAudioClipMoved
+          )
 
-      val totalHeight = baseAudioY + (timeline.audioTracks.size * (trackHeight + trackSpacing)) + 30.0
+      val totalHeight = baseAudioY + (orderedAudioTracks.size * (trackHeight + trackSpacing)) + 30.0
       prefHeight = Math.max(220.0, totalHeight)
 
       playheadLine.endY = prefHeight.value
