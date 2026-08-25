@@ -1,91 +1,87 @@
 package app.view.components
 
-import core.model.VideoEffect
-import scalafx.collections.ObservableBuffer
+import scalafx.Includes.*
 import scalafx.geometry.Pos
 import scalafx.scene.control.{Button, ComboBox, Label}
 import scalafx.scene.layout.HBox
-import java.util.concurrent.atomic.AtomicBoolean
+import core.model.VideoEffect
 
 class ToolbarControls(
-                       onImport: () => Unit,
-                       onDelete: () => Unit,
-                       onCut: () => Unit,
-                       onSnap: () => Unit,
-                       onPlay: () => Unit,
-                       onAddVideoTrack: () => Unit,
-                       onAddAudioTrack: () => Unit,
-                       onEffectSelected: VideoEffect => Unit
+                       val onImport: () => Unit = () => (),
+                       val onDelete: () => Unit = () => (),
+                       val onCut: () => Unit = () => (),
+                       val onSnap: () => Unit = () => (),
+                       val onAddVideoTrack: () => Unit = () => (),
+                       val onAddAudioTrack: () => Unit = () => (),
+                       val onPlay: () => Unit = () => (),
+                       val onExport: () => Unit = () => (),
+                       val onEffectSelected: VideoEffect => Unit = _ => ()
                      ) extends HBox:
 
   spacing = 10
   alignment = Pos.CenterLeft
+  style = "-fx-padding: 8; -fx-background-color: #2b2b2b; -fx-background-radius: 4;"
 
-  private val importButton = new Button("Import"):
-    focusTraversable = false
+  val importButton: Button = new Button("Import"):
+    style = "-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;"
     onAction = _ => onImport()
 
-  private val deleteButton = new Button("Delete"):
-    focusTraversable = false
+  val exportButton: Button = new Button("Export"):
+    style = "-fx-background-color: #9C27B0; -fx-text-fill: white; -fx-font-weight: bold;"
+    onAction = _ => onExport()
+
+  val deleteButton: Button = new Button("Delete"):
+    style = "-fx-background-color: #f44336; -fx-text-fill: white;"
     onAction = _ => onDelete()
 
-  private val cutButton = new Button("Cut"):
-    focusTraversable = false
+  val cutButton: Button = new Button("Cut"):
+    style = "-fx-background-color: #2196F3; -fx-text-fill: white;"
     onAction = _ => onCut()
 
-  private val snapButton = new Button("Snap"):
-    focusTraversable = false
+  val snapButton: Button = new Button("Snap"):
+    style = "-fx-background-color: #ff9800; -fx-text-fill: white;"
     onAction = _ => onSnap()
 
-  private val addVideoTrackButton = new Button("+ Video"):
-    focusTraversable = false
-    style = "-fx-background-color: #243b55; -fx-text-fill: white; -fx-font-weight: bold;"
+  val addVideoTrackButton: Button = new Button("+ Video"):
+    style = "-fx-background-color: #3f51b5; -fx-text-fill: white;"
     onAction = _ => onAddVideoTrack()
 
-  private val addAudioTrackButton = new Button("+ Audio"):
-    focusTraversable = false
-    style = "-fx-background-color: #2d4a2d; -fx-text-fill: white; -fx-font-weight: bold;"
+  val addAudioTrackButton: Button = new Button("+ Audio"):
+    style = "-fx-background-color: #009688; -fx-text-fill: white;"
     onAction = _ => onAddAudioTrack()
 
-  private val playButton = new Button("Play/Pause"):
-    focusTraversable = false
+  val playButton: Button = new Button("Play/Pause"):
+    style = "-fx-background-color: #607d8b; -fx-text-fill: white;"
     onAction = _ => onPlay()
 
-  private val timeLabel = new Label("00:00.000"):
-    style = "-fx-text-fill: white; -fx-font-family: monospace; -fx-font-size: 14px;"
+  val timeLabel: Label = new Label("Time: 0.0s"):
+    style = "-fx-text-fill: white; -fx-font-family: monospace;"
 
   private val effectLabel = new Label("Effect:"):
-    style = "-fx-text-fill: white; -fx-font-size: 13px;"
+    style = "-fx-text-fill: white;"
+    visible = false
+    managed = false
 
-  private val effectOptions = Seq(
-    "None"       -> VideoEffect.None,
-    "Grayscale"  -> VideoEffect.Grayscale,
-    "Sepia"      -> VideoEffect.Sepia,
-    "Invert"     -> VideoEffect.Invert,
-    "Brightness" -> VideoEffect.Brightness(0.25),
-    "ZoomIn"     -> VideoEffect.ZoomIn(1.3),
-    "Shake"      -> VideoEffect.Shake(8.0, 12.0),
-    "FadeIn"     -> VideoEffect.FadeIn(1.0)
-  )
-
-  private val isUpdatingUi = new AtomicBoolean(false)
-
-  private val effectComboBox = new ComboBox[String](ObservableBuffer(effectOptions.map(_._1)*)):
-    focusTraversable = false
+  private val effectComboBox = new ComboBox[String](
+    Seq("None", "Grayscale", "Sepia", "Invert", "ZoomIn", "FadeIn", "Shake")
+  ):
     value = "None"
+    visible = false
+    managed = false
     onAction = _ =>
-      if !isUpdatingUi.get() && value.value != null then
-        effectOptions.find(_._1 == value.value).foreach { case (_, eff) =>
-          onEffectSelected(eff)
-        }
-
-  effectLabel.visible = false
-  effectLabel.managed = false
-  effectComboBox.visible = false
-  effectComboBox.managed = false
+      val selectedEffect = value.value match
+        case "Grayscale" => VideoEffect.Grayscale
+        case "Sepia"     => VideoEffect.Sepia
+        case "Invert"    => VideoEffect.Invert
+        case "ZoomIn"    => VideoEffect.ZoomIn(2.0)
+        case "FadeIn"    => VideoEffect.FadeIn(2.0)
+        case "Shake"     => VideoEffect.Shake(10.0, 5.0)
+        case _           => VideoEffect.None
+      onEffectSelected(selectedEffect)
 
   children = Seq(
     importButton,
+    exportButton,
     deleteButton,
     cutButton,
     snapButton,
@@ -98,28 +94,21 @@ class ToolbarControls(
   )
 
   def updateTimeLabel(seconds: Double): Unit =
-    val totalSeconds = seconds.toInt
-    val minutes = totalSeconds / 60
-    val remSeconds = totalSeconds % 60
-    val millis = ((seconds - totalSeconds) * 1000).toInt
-    timeLabel.text = f"$minutes%02d:$remSeconds%02d.$millis%03d"
+    timeLabel.text = f"Time: $seconds%.1fs"
+
+  def setEffectControlsVisible(visible: Boolean): Unit =
+    effectLabel.visible = visible
+    effectLabel.managed = visible
+    effectComboBox.visible = visible
+    effectComboBox.managed = visible
 
   def setSelectedEffect(effect: VideoEffect): Unit =
-    isUpdatingUi.set(true)
-    val name = effect match
-      case VideoEffect.None          => "None"
-      case VideoEffect.Grayscale     => "Grayscale"
-      case VideoEffect.Sepia         => "Sepia"
-      case VideoEffect.Invert        => "Invert"
-      case VideoEffect.Brightness(_) => "Brightness"
-      case VideoEffect.ZoomIn(_)     => "ZoomIn"
-      case VideoEffect.Shake(_, _)   => "Shake"
-      case VideoEffect.FadeIn(_)     => "FadeIn"
-    effectComboBox.value = name
-    isUpdatingUi.set(false)
-
-  def setEffectControlsVisible(isVisible: Boolean): Unit =
-    effectLabel.visible = isVisible
-    effectLabel.managed = isVisible
-    effectComboBox.visible = isVisible
-    effectComboBox.managed = isVisible
+    val stringVal = effect match
+      case VideoEffect.None        => "None"
+      case VideoEffect.Grayscale   => "Grayscale"
+      case VideoEffect.Sepia       => "Sepia"
+      case VideoEffect.Invert      => "Invert"
+      case VideoEffect.ZoomIn(_)   => "ZoomIn"
+      case VideoEffect.FadeIn(_)   => "FadeIn"
+      case VideoEffect.Shake(_, _) => "Shake"
+    effectComboBox.value = stringVal

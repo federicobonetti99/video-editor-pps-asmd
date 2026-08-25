@@ -15,6 +15,7 @@ class TimelineView(
                     val onTogglePlaybackRequested: () => Unit = () => (),
                     val onTimeChanged: Double => Unit = _ => (),
                     val onImportRequested: () => Unit = () => (),
+                    val onExportRequested: () => Unit = () => (),
                     val onVideoTimeUpdated: Double => Unit = _ => (),
                     val onClipSelected: Option[SelectedClip] => Unit = _ => (),
                     val onClipMoved: (MediaClip, Int, Double) => Unit = (_, _, _) => (),
@@ -59,6 +60,7 @@ class TimelineView(
 
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
+    onExport = () => onExportRequested(),
     onDelete = () => onDeleteRequested(),
     onCut    = () => onCutRequested(timeSlider.value.value),
     onSnap   = () => onSnapRequested(),

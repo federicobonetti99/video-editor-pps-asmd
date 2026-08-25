@@ -2,6 +2,10 @@ package app.controller
 
 import app.utils.MediaImporter
 import scalafx.Includes.*
+import scalafx.application.Platform
+import scalafx.scene.control.Alert
+import scalafx.scene.control.Alert.AlertType
+import scalafx.stage.FileChooser
 import core.model.*
 import core.engine.*
 import app.view.TimelineView
@@ -9,6 +13,9 @@ import app.view.components.{ActiveAudioTrackInfo, SelectedClip}
 import scalafx.scene.layout.VBox
 import scalafx.animation.AnimationTimer
 import java.util.concurrent.atomic.AtomicReference
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Failure, Success}
 
 private case class ControllerState(
                                     timeline: Timeline,
@@ -38,6 +45,7 @@ class TimelineController:
     onTogglePlaybackRequested = () => handleTogglePlayback(),
     onTimeChanged = newCursorTime => handleTimeChanged(newCursorTime),
     onImportRequested = () => handleImport(),
+    onExportRequested = () => handleExport(),
     onVideoTimeUpdated = _ => (),
     onClipSelected = _ => (),
     onClipMoved = (clip, targetTrackId, newTime) => handleClipMoved(clip, targetTrackId, newTime),
@@ -189,6 +197,39 @@ class TimelineController:
       view.render(updatedTimeline)
       syncMediaPlayback()
     }
+
+  private def handleExport(): Unit =
+    val current = state.get()
+    val currentWindow = view.getScene.getWindow
+    val fileChooser = new FileChooser:
+      title = "Export Timeline Video"
+      extensionFilters.add(new FileChooser.ExtensionFilter("MP4 Video (*.mp4)", "*.mp4"))
+
+    val targetFile = fileChooser.showSaveDialog(currentWindow)
+    if targetFile != null then
+      val settings = ExportSettings(outputFile = targetFile)
+      val exporter = VideoExporter()
+
+      Future.fromTry(exporter.exportVideo(current.timeline, settings)).onComplete {
+        case Success(file) =>
+          Platform.runLater {
+            val alert = new Alert(AlertType.Information) {
+              title = "Export Success"
+              headerText = "Video Exported Successfully"
+              contentText = s"Saved to: ${file.getAbsolutePath}"
+            }
+            alert.showAndWait()
+          }
+        case Failure(exception) =>
+          Platform.runLater {
+            val alert = new Alert(AlertType.Error) {
+              title = "Export Failed"
+              headerText = "FFmpeg Export Failed"
+              contentText = exception.getMessage
+            }
+            alert.showAndWait()
+          }
+      }
 
   private def handleAddVideoTrack(): Unit =
     val updatedTimeline = TimelineEngine.addVideoTrack(state.get().timeline)
