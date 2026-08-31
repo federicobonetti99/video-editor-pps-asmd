@@ -2,8 +2,9 @@ package app.view
 
 import scalafx.Includes.*
 import scalafx.application.Platform
-import scalafx.scene.control.{ScrollPane, Slider}
-import scalafx.scene.layout.VBox
+import scalafx.geometry.Pos
+import scalafx.scene.control.{Label, ScrollPane, Slider}
+import scalafx.scene.layout.{HBox, VBox}
 import scalafx.beans.property.ObjectProperty
 import core.model.*
 import app.view.components.*
@@ -31,20 +32,23 @@ class TimelineView(
 
   private val selectedClipProperty = ObjectProperty[Option[SelectedClip]](None)
   private val currentTimelineProperty = ObjectProperty[Option[Timeline]](None)
+  private var currentTrackedTime: Double = 0.0
 
   private val preview = new VideoPreview(480.0, 270.0)
   private val audioPlayer = new AudioPlayer()
 
-  private val timelinePanel = new TimelinePanel(
+  private val timelinePanel: TimelinePanel = new TimelinePanel(
+    pixelsPerSecond = 30.0,
     onVideoClipClicked = (trackId, clip) => toggleVideoSelection(trackId, clip),
     onAudioClipClicked = (trackId, clip) => toggleAudioSelection(trackId, clip),
     onVideoClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime),
-    onAudioClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime)
+    onAudioClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime),
+    onSeekRequested = newTime => handleUserSeek(newTime)
   )
 
   private val timelineScrollPane = new ScrollPane:
     content = timelinePanel
-    prefHeight = 200
+    prefHeight = 220
     minHeight = 150
     fitToWidth = false
     fitToHeight = false
@@ -52,13 +56,26 @@ class TimelineView(
     vbarPolicy = ScrollPane.ScrollBarPolicy.AsNeeded
     style = "-fx-background: #1e1e1e; -fx-border-color: #333333; -fx-border-width: 1px;"
 
-  private val timeSlider = new Slider:
-    min = 0.0
-    max = 60.0
-    value = 0.0
-    prefWidth = 600
-    maxWidth = 800
+  private val zoomLabel = new Label("Zoom:"):
+    style = "-fx-text-fill: #aaaaaa; -fx-font-size: 11px;"
+
+  private val zoomSlider = new Slider:
+    min = 5.0
+    max = 100.0
+    value = 30.0
+    prefWidth = 150
+    maxWidth = 200
     focusTraversable = false
+
+  zoomSlider.valueProperty.addListener: (_, _, newValue) =>
+    val newPps = newValue.doubleValue()
+    timelinePanel.updateZoom(newPps)
+    currentTimelineProperty.value.foreach(render)
+
+  private val zoomControls = new HBox:
+    spacing = 8
+    alignment = Pos.CenterRight
+    children = Seq(zoomLabel, zoomSlider)
 
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
@@ -66,7 +83,7 @@ class TimelineView(
     onUndo   = () => onUndoRequested(),
     onRedo   = () => onRedoRequested(),
     onDelete = () => onDeleteRequested(),
-    onCut    = () => onCutRequested(timeSlider.value.value),
+    onCut    = () => onCutRequested(currentTrackedTime),
     onSnap   = () => onSnapRequested(),
     onAddVideoTrack = () => onAddVideoTrackRequested(),
     onAddAudioTrack = () => onAddAudioTrackRequested(),
@@ -74,17 +91,13 @@ class TimelineView(
     onEffectSelected = effect => onEffectSelected(effect)
   )
 
-  children = Seq(preview, timeSlider, timelineScrollPane, toolbar)
+  children = Seq(preview, zoomControls, timelineScrollPane, toolbar)
 
-  timeSlider.valueProperty.addListener: (_, _, newValue) =>
-    val seconds = newValue.doubleValue()
-    toolbar.updateTimeLabel(seconds)
-    timelinePanel.updatePlayhead(seconds)
-    if timeSlider.isValueChanging then
-      onTimeChanged(seconds)
-
-  timeSlider.onMouseClicked = _ =>
-    onTimeChanged(timeSlider.value.value)
+  private def handleUserSeek(newTime: Double): Unit =
+    currentTrackedTime = newTime
+    toolbar.updateTimeLabel(newTime)
+    timelinePanel.updatePlayhead(newTime)
+    onTimeChanged(newTime)
 
   def getSelectedClip: Option[SelectedClip] = selectedClipProperty.value
 
@@ -121,8 +134,10 @@ class TimelineView(
     else selectClip(Some(SelectedClip.SelectedAudio(trackId, clip)))
 
   def updateTimelineTime(seconds: Double): Unit =
+    currentTrackedTime = seconds
     Platform.runLater:
-      timeSlider.value = seconds
+      toolbar.updateTimeLabel(seconds)
+      timelinePanel.updatePlayhead(seconds)
 
   def updatePreview(
                      videoUrlOpt: Option[String],
@@ -147,10 +162,4 @@ class TimelineView(
 
   def render(timeline: Timeline): Unit =
     currentTimelineProperty.value = Some(timeline)
-    val maxDuration = {
-      val maxV = timeline.videoTracks.flatMap(_.clips).map(_.endTime).maxOption.getOrElse(0.0)
-      val maxA = timeline.audioTracks.flatMap(_.clips).map(_.endTime).maxOption.getOrElse(0.0)
-      Math.max(maxV, maxA)
-    }
-    timeSlider.max = Math.max(60.0, maxDuration)
-    timelinePanel.draw(timeline, timeSlider.value.value, selectedClipProperty.value)
+    timelinePanel.draw(timeline, currentTrackedTime, selectedClipProperty.value)

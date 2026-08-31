@@ -18,12 +18,13 @@ enum SelectedClip:
   case SelectedAudio(trackId: Int, clip: AudioClip)
 
 class TimelinePanel(
-                     pixelsPerSecond: Double = 20.0,
+                     private var pixelsPerSecond: Double = 30.0,
                      trackHeight: Double = 50.0,
                      val onVideoClipClicked: (Int, VideoClip) => Unit = (_, _) => (),
                      val onAudioClipClicked: (Int, AudioClip) => Unit = (_, _) => (),
                      val onVideoClipMoved: (VideoClip, Int, Double) => Unit = (_, _, _) => (),
-                     val onAudioClipMoved: (AudioClip, Int, Double) => Unit = (_, _, _) => ()
+                     val onAudioClipMoved: (AudioClip, Int, Double) => Unit = (_, _, _) => (),
+                     val onSeekRequested: Double => Unit = _ => ()
                    ) extends Pane:
 
   private val trackSpacing = 8.0
@@ -37,6 +38,22 @@ class TimelinePanel(
     endY = 250
     stroke = Color.Red
     strokeWidth = 2
+
+  private def timeAtX(x: Double): Double =
+    Math.max(0.0, (x - trackLabelWidth) / pixelsPerSecond)
+
+  onMousePressed = event =>
+    if event.x >= trackLabelWidth then
+      onSeekRequested(timeAtX(event.x))
+
+  onMouseDragged = event =>
+    if event.x >= trackLabelWidth then
+      onSeekRequested(timeAtX(event.x))
+
+  def updateZoom(newPps: Double): Unit =
+    pixelsPerSecond = newPps
+
+  def getPixelsPerSecond: Double = pixelsPerSecond
 
   def updatePlayhead(seconds: Double): Unit =
     val xPos = trackLabelWidth + (seconds * pixelsPerSecond)
