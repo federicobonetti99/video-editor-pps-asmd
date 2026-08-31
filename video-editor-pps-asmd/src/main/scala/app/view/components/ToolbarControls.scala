@@ -15,6 +15,8 @@ class ToolbarControls(
                        val onAddAudioTrack: () => Unit = () => (),
                        val onPlay: () => Unit = () => (),
                        val onExport: () => Unit = () => (),
+                       val onUndo: () => Unit = () => (),
+                       val onRedo: () => Unit = () => (),
                        val onEffectSelected: VideoEffect => Unit = _ => ()
                      ) extends HBox:
 
@@ -29,6 +31,16 @@ class ToolbarControls(
   val exportButton: Button = new Button("Export"):
     style = "-fx-background-color: #9C27B0; -fx-text-fill: white; -fx-font-weight: bold;"
     onAction = _ => onExport()
+
+  val undoButton: Button = new Button("Undo"):
+    style = "-fx-background-color: #795548; -fx-text-fill: white;"
+    disable = true
+    onAction = _ => onUndo()
+
+  val redoButton: Button = new Button("Redo"):
+    style = "-fx-background-color: #795548; -fx-text-fill: white;"
+    disable = true
+    onAction = _ => onRedo()
 
   val deleteButton: Button = new Button("Delete"):
     style = "-fx-background-color: #f44336; -fx-text-fill: white;"
@@ -82,6 +94,8 @@ class ToolbarControls(
   children = Seq(
     importButton,
     exportButton,
+    undoButton,
+    redoButton,
     deleteButton,
     cutButton,
     snapButton,
@@ -95,6 +109,10 @@ class ToolbarControls(
 
   def updateTimeLabel(seconds: Double): Unit =
     timeLabel.text = f"Time: $seconds%.1fs"
+
+  def updateHistoryButtons(canUndo: Boolean, canRedo: Boolean): Unit =
+    undoButton.disable = !canUndo
+    redoButton.disable = !canRedo
 
   def setEffectControlsVisible(visible: Boolean): Unit =
     effectLabel.visible = visible

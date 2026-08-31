@@ -18,23 +18,26 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 
 private case class ControllerState(
-                                    timeline: Timeline,
+                                    history: History[Timeline],
                                     currentTime: Double = 0.0,
                                     playerState: PlayerState = Paused,
                                     lastFrameTimeNanos: Long = 0L
-                                  )
+                                  ):
+  def timeline: Timeline = history.current
 
 class TimelineController:
 
   private val initialVideoTrack = VideoTrack(id = 1, clips = Nil)
   private val initialAudioTrack = AudioTrack(id = 1, clips = Nil)
 
+  private val initialTimeline = Timeline(
+    videoTracks = List(initialVideoTrack),
+    audioTracks = List(initialAudioTrack)
+  )
+
   private val state = new AtomicReference[ControllerState](
     ControllerState(
-      timeline = Timeline(
-        videoTracks = List(initialVideoTrack),
-        audioTracks = List(initialAudioTrack)
-      )
+      history = History(current = initialTimeline)
     )
   )
 
@@ -46,6 +49,8 @@ class TimelineController:
     onTimeChanged = newCursorTime => handleTimeChanged(newCursorTime),
     onImportRequested = () => handleImport(),
     onExportRequested = () => handleExport(),
+    onUndoRequested = () => handleUndo(),
+    onRedoRequested = () => handleRedo(),
     onVideoTimeUpdated = _ => (),
     onClipSelected = _ => (),
     onClipMoved = (clip, targetTrackId, newTime) => handleClipMoved(clip, targetTrackId, newTime),
@@ -54,7 +59,11 @@ class TimelineController:
     onAddAudioTrackRequested = () => handleAddAudioTrack()
   )
 
-  private val inputHandler = new InputHandler(onTogglePlayback = () => handleTogglePlayback())
+  private val inputHandler = new InputHandler(
+    onTogglePlayback = () => handleTogglePlayback(),
+    onUndo = () => handleUndo(),
+    onRedo = () => handleRedo()
+  )
 
   view.onKeyReleased = (event: scalafx.scene.input.KeyEvent) => inputHandler.handleKeyEvent(event)
 
@@ -94,6 +103,34 @@ class TimelineController:
           state.set(current.copy(lastFrameTimeNanos = 0L))
     else
       state.set(current.copy(lastFrameTimeNanos = now))
+
+  private def updateTimelineState(newTimeline: Timeline): Unit =
+    val current = state.get()
+    val newHistory = current.history.push(newTimeline)
+    state.set(current.copy(history = newHistory))
+    view.render(newTimeline)
+    view.updateHistoryControls(newHistory.canUndo, newHistory.canRedo)
+    syncMediaPlayback()
+
+  private def handleUndo(): Unit =
+    val current = state.get()
+    if current.history.canUndo then
+      val newHistory = current.history.undo()
+      state.set(current.copy(history = newHistory))
+      view.selectClip(None)
+      view.render(newHistory.current)
+      view.updateHistoryControls(newHistory.canUndo, newHistory.canRedo)
+      syncMediaPlayback()
+
+  private def handleRedo(): Unit =
+    val current = state.get()
+    if current.history.canRedo then
+      val newHistory = current.history.redo()
+      state.set(current.copy(history = newHistory))
+      view.selectClip(None)
+      view.render(newHistory.current)
+      view.updateHistoryControls(newHistory.canUndo, newHistory.canRedo)
+      syncMediaPlayback()
 
   private def findVideoTrack(id: Int): Option[VideoTrack] =
     state.get().timeline.videoTracks.find(_.id == id)
@@ -193,9 +230,7 @@ class TimelineController:
         videoClip = importedClip
       )
 
-      state.set(current.copy(timeline = updatedTimeline))
-      view.render(updatedTimeline)
-      syncMediaPlayback()
+      updateTimelineState(updatedTimeline)
     }
 
   private def handleExport(): Unit =
@@ -233,39 +268,29 @@ class TimelineController:
 
   private def handleAddVideoTrack(): Unit =
     val updatedTimeline = TimelineEngine.addVideoTrack(state.get().timeline)
-    state.set(state.get().copy(timeline = updatedTimeline))
-    view.render(updatedTimeline)
+    updateTimelineState(updatedTimeline)
 
   private def handleAddAudioTrack(): Unit =
     val updatedTimeline = TimelineEngine.addAudioTrack(state.get().timeline)
-    state.set(state.get().copy(timeline = updatedTimeline))
-    view.render(updatedTimeline)
+    updateTimelineState(updatedTimeline)
 
   private def handleDelete(): Unit =
     val updatedTimeline = calculateTimelineAfterDelete()
-    state.set(state.get().copy(timeline = updatedTimeline))
     view.selectClip(None)
-    view.render(updatedTimeline)
-    syncMediaPlayback()
+    updateTimelineState(updatedTimeline)
 
   private def handleCut(cursorTime: Double): Unit =
     val updatedTimeline = calculateTimelineAfterCut(cursorTime)
-    state.set(state.get().copy(timeline = updatedTimeline))
-    view.render(updatedTimeline)
-    syncMediaPlayback()
+    updateTimelineState(updatedTimeline)
 
   private def handleSnap(): Unit =
     val updatedTimeline = TimelineEngine.snapAllTracks(state.get().timeline)
-    state.set(state.get().copy(timeline = updatedTimeline))
-    view.render(updatedTimeline)
-    syncMediaPlayback()
+    updateTimelineState(updatedTimeline)
 
   private def handleClipMoved(clip: MediaClip, targetTrackId: Int, newTime: Double): Unit =
     val current = state.get()
     val updatedTimeline = TimelineEngine.moveClipToTrack(current.timeline, clip, targetTrackId, newTime)
-    state.set(current.copy(timeline = updatedTimeline))
-    view.render(updatedTimeline)
-    syncMediaPlayback()
+    updateTimelineState(updatedTimeline)
 
   private def handleTimeChanged(newCursorTime: Double): Unit =
     state.set(state.get().copy(currentTime = newCursorTime))
@@ -280,10 +305,8 @@ class TimelineController:
           if idx != -1 then
             val updatedTimeline = TimelineEngine.applyEffectToVideoClip(current.timeline, trackId, idx, effect)
             val updatedClip = track.clips(idx).copy(effect = effect)
-            state.set(current.copy(timeline = updatedTimeline))
             view.selectClip(Some(SelectedClip.SelectedVideo(trackId, updatedClip)))
-            view.render(updatedTimeline)
-            syncMediaPlayback()
+            updateTimelineState(updatedTimeline)
         }
       case _ => ()
 
@@ -354,4 +377,5 @@ class TimelineController:
   def viewComponent: VBox = view
 
   view.render(state.get().timeline)
+  view.updateHistoryControls(canUndo = false, canRedo = false)
   syncMediaPlayback()

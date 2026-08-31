@@ -16,6 +16,8 @@ class TimelineView(
                     val onTimeChanged: Double => Unit = _ => (),
                     val onImportRequested: () => Unit = () => (),
                     val onExportRequested: () => Unit = () => (),
+                    val onUndoRequested: () => Unit = () => (),
+                    val onRedoRequested: () => Unit = () => (),
                     val onVideoTimeUpdated: Double => Unit = _ => (),
                     val onClipSelected: Option[SelectedClip] => Unit = _ => (),
                     val onClipMoved: (MediaClip, Int, Double) => Unit = (_, _, _) => (),
@@ -61,6 +63,8 @@ class TimelineView(
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
     onExport = () => onExportRequested(),
+    onUndo   = () => onUndoRequested(),
+    onRedo   = () => onRedoRequested(),
     onDelete = () => onDeleteRequested(),
     onCut    = () => onCutRequested(timeSlider.value.value),
     onSnap   = () => onSnapRequested(),
@@ -83,6 +87,9 @@ class TimelineView(
     onTimeChanged(timeSlider.value.value)
 
   def getSelectedClip: Option[SelectedClip] = selectedClipProperty.value
+
+  def updateHistoryControls(canUndo: Boolean, canRedo: Boolean): Unit =
+    toolbar.updateHistoryButtons(canUndo, canRedo)
 
   def selectClip(targetOpt: Option[SelectedClip]): Unit =
     selectedClipProperty.value = targetOpt
