@@ -4,7 +4,7 @@ import scalafx.Includes.*
 import scalafx.application.Platform
 import scalafx.geometry.Pos
 import scalafx.scene.control.{Label, ScrollPane, Slider}
-import scalafx.scene.layout.{HBox, VBox}
+import scalafx.scene.layout.{HBox, Priority, Region, StackPane, VBox}
 import scalafx.beans.property.ObjectProperty
 import core.model.*
 import app.view.components.*
@@ -27,34 +27,57 @@ class TimelineView(
                     val onAddAudioTrackRequested: () => Unit = () => ()
                   ) extends VBox:
 
-  spacing = 15
-  style = "-fx-padding: 15; -fx-background-color: #1a1a1a;"
+  spacing = 0
+  style = "-fx-padding: 0; -fx-background-color: #1a1a1a;"
 
   private val selectedClipProperty = ObjectProperty[Option[SelectedClip]](None)
   private val currentTimelineProperty = ObjectProperty[Option[Timeline]](None)
-  private var currentTrackedTime: Double = 0.0
+  private val currentTrackedTimeProperty = ObjectProperty[Double](0.0)
 
   private val preview = new VideoPreview(480.0, 270.0)
   private val audioPlayer = new AudioPlayer()
 
-  private val timelinePanel: TimelinePanel = new TimelinePanel(
-    pixelsPerSecond = 30.0,
-    onVideoClipClicked = (trackId, clip) => toggleVideoSelection(trackId, clip),
-    onAudioClipClicked = (trackId, clip) => toggleAudioSelection(trackId, clip),
-    onVideoClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime),
-    onAudioClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime),
-    onSeekRequested = newTime => handleUserSeek(newTime)
-  )
+  private val topMask = new Region:
+    prefHeight = 20.0
+    minHeight = 20.0
+    maxHeight = 20.0
+    style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 0 0 1px 0;"
 
-  private val timelineScrollPane = new ScrollPane:
-    content = timelinePanel
-    prefHeight = 220
-    minHeight = 150
-    fitToWidth = false
-    fitToHeight = false
-    hbarPolicy = ScrollPane.ScrollBarPolicy.AsNeeded
-    vbarPolicy = ScrollPane.ScrollBarPolicy.AsNeeded
-    style = "-fx-background: #1e1e1e; -fx-border-color: #333333; -fx-border-width: 1px;"
+  private val leftMask = new Region:
+    hgrow = Priority.Always
+    minWidth = 0.0
+    prefHeight = 270.0
+    minHeight = 270.0
+    maxHeight = 270.0
+    style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 0 1px 0 0;"
+
+  private val middleSpacer = new Region:
+    minWidth = 480.0
+    prefWidth = 480.0
+    maxWidth = 480.0
+    prefHeight = 270.0
+    minHeight = 270.0
+    maxHeight = 270.0
+    mouseTransparent = true
+
+  private val rightMask = new Region:
+    hgrow = Priority.Always
+    minWidth = 0.0
+    prefHeight = 270.0
+    minHeight = 270.0
+    maxHeight = 270.0
+    style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 0 0 0 1px;"
+
+  private val sideMasksRow = new HBox:
+    alignment = Pos.Center
+    pickOnBounds = false
+    prefHeight = 270.0
+    minHeight = 270.0
+    maxHeight = 270.0
+    children = Seq(leftMask, middleSpacer, rightMask)
+
+  HBox.setHgrow(leftMask, Priority.Always)
+  HBox.setHgrow(rightMask, Priority.Always)
 
   private val zoomLabel = new Label("Zoom:"):
     style = "-fx-text-fill: #aaaaaa; -fx-font-size: 11px;"
@@ -67,15 +90,60 @@ class TimelineView(
     maxWidth = 200
     focusTraversable = false
 
+  private val zoomControls = new HBox:
+    spacing = 8
+    alignment = Pos.CenterRight
+    style = "-fx-padding: 0 15 0 0;"
+    children = Seq(zoomLabel, zoomSlider)
+
+  private val bottomMaskBackground = new Region:
+    prefHeight = 55.0
+    minHeight = 55.0
+    maxHeight = 55.0
+    style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 1px 0 0 0;"
+
+  private val bottomMaskBar = new StackPane:
+    prefHeight = 55.0
+    minHeight = 55.0
+    maxHeight = 55.0
+    children = Seq(bottomMaskBackground, zoomControls)
+
+  private val masksOverlay = new VBox:
+    spacing = 0
+    alignment = Pos.Center
+    pickOnBounds = false
+    children = Seq(topMask, sideMasksRow, bottomMaskBar)
+
+  private val previewViewport = new StackPane:
+    alignment = Pos.Center
+    prefHeight = 345.0
+    minHeight = 345.0
+    maxHeight = 345.0
+    children = Seq(preview, masksOverlay)
+
+  private val timelinePanel: TimelinePanel = new TimelinePanel(
+    pixelsPerSecond = 30.0,
+    onVideoClipClicked = (trackId, clip) => toggleVideoSelection(trackId, clip),
+    onAudioClipClicked = (trackId, clip) => toggleAudioSelection(trackId, clip),
+    onVideoClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime),
+    onAudioClipMoved = (clip, targetTrackId, newTime) => onClipMoved(clip, targetTrackId, newTime),
+    onSeekRequested = newTime => handleUserSeek(newTime)
+  )
+
   zoomSlider.valueProperty.addListener: (_, _, newValue) =>
     val newPps = newValue.doubleValue()
     timelinePanel.updateZoom(newPps)
     currentTimelineProperty.value.foreach(render)
 
-  private val zoomControls = new HBox:
-    spacing = 8
-    alignment = Pos.CenterRight
-    children = Seq(zoomLabel, zoomSlider)
+  private val timelineScrollPane = new ScrollPane:
+    content = timelinePanel
+    prefHeight = 220
+    minHeight = 150
+    fitToWidth = false
+    fitToHeight = false
+    hbarPolicy = ScrollPane.ScrollBarPolicy.AsNeeded
+    vbarPolicy = ScrollPane.ScrollBarPolicy.AsNeeded
+    style = "-fx-background: #1e1e1e; -fx-border-color: #333333; -fx-border-width: 1px;"
 
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
@@ -83,7 +151,7 @@ class TimelineView(
     onUndo   = () => onUndoRequested(),
     onRedo   = () => onRedoRequested(),
     onDelete = () => onDeleteRequested(),
-    onCut    = () => onCutRequested(currentTrackedTime),
+    onCut    = () => onCutRequested(currentTrackedTimeProperty.value),
     onSnap   = () => onSnapRequested(),
     onAddVideoTrack = () => onAddVideoTrackRequested(),
     onAddAudioTrack = () => onAddAudioTrackRequested(),
@@ -91,10 +159,15 @@ class TimelineView(
     onEffectSelected = effect => onEffectSelected(effect)
   )
 
-  children = Seq(preview, zoomControls, timelineScrollPane, toolbar)
+  private val bottomSection = new VBox:
+    spacing = 15
+    style = "-fx-padding: 0 15 15 15;"
+    children = Seq(timelineScrollPane, toolbar)
+
+  children = Seq(previewViewport, bottomSection)
 
   private def handleUserSeek(newTime: Double): Unit =
-    currentTrackedTime = newTime
+    currentTrackedTimeProperty.value = newTime
     toolbar.updateTimeLabel(newTime)
     timelinePanel.updatePlayhead(newTime)
     onTimeChanged(newTime)
@@ -134,7 +207,7 @@ class TimelineView(
     else selectClip(Some(SelectedClip.SelectedAudio(trackId, clip)))
 
   def updateTimelineTime(seconds: Double): Unit =
-    currentTrackedTime = seconds
+    currentTrackedTimeProperty.value = seconds
     Platform.runLater:
       toolbar.updateTimeLabel(seconds)
       timelinePanel.updatePlayhead(seconds)
@@ -162,4 +235,4 @@ class TimelineView(
 
   def render(timeline: Timeline): Unit =
     currentTimelineProperty.value = Some(timeline)
-    timelinePanel.draw(timeline, currentTrackedTime, selectedClipProperty.value)
+    timelinePanel.draw(timeline, currentTrackedTimeProperty.value, selectedClipProperty.value)
