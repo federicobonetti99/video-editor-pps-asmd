@@ -3,14 +3,16 @@ package app.controller
 import app.utils.MediaImporter
 import scalafx.Includes.*
 import scalafx.application.Platform
-import scalafx.scene.control.Alert
+import scalafx.geometry.{Insets, Pos}
+import scalafx.scene.Scene
+import scalafx.scene.control.{Alert, Label, ProgressBar}
 import scalafx.scene.control.Alert.AlertType
-import scalafx.stage.FileChooser
+import scalafx.scene.layout.VBox
+import scalafx.stage.{FileChooser, Modality, Stage, StageStyle}
 import core.model.*
 import core.engine.*
 import app.view.TimelineView
 import app.view.components.{ActiveAudioTrackInfo, SelectedClip}
-import scalafx.scene.layout.VBox
 import scalafx.animation.AnimationTimer
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Future
@@ -245,9 +247,42 @@ class TimelineController:
       val settings = ExportSettings(outputFile = targetFile)
       val exporter = VideoExporter()
 
-      Future.fromTry(exporter.exportVideo(current.timeline, settings)).onComplete {
+      val progressLabel = new Label("Preparazione esportazione..."):
+        style = "-fx-font-size: 14px; -fx-font-weight: bold;"
+
+      val progressBar = new ProgressBar:
+        progress = 0.0
+        prefWidth = 320
+        prefHeight = 22
+
+      val dialogStage = new Stage:
+        title = "Esportazione Video"
+        initModality(Modality.ApplicationModal)
+        if currentWindow != null then initOwner(currentWindow)
+        resizable = false
+        scene = new Scene(360, 120):
+          root = new VBox(15, progressLabel, progressBar):
+            padding = Insets(20)
+            alignment = Pos.Center
+
+      dialogStage.show()
+
+      Future {
+        exporter.exportVideo(
+          timeline = current.timeline,
+          settings = settings,
+          onProgress = { fraction =>
+            Platform.runLater {
+              progressBar.progress = fraction
+              val percent = Math.min(100, (fraction * 100).toInt)
+              progressLabel.text = s"Esportazione in corso: $percent%"
+            }
+          }
+        )
+      }.flatMap(res => Future.fromTry(res)).onComplete {
         case Success(file) =>
           Platform.runLater {
+            dialogStage.close()
             val alert = new Alert(AlertType.Information) {
               title = "Export Success"
               headerText = "Video Exported Successfully"
@@ -257,6 +292,7 @@ class TimelineController:
           }
         case Failure(exception) =>
           Platform.runLater {
+            dialogStage.close()
             val alert = new Alert(AlertType.Error) {
               title = "Export Failed"
               headerText = "FFmpeg Export Failed"
