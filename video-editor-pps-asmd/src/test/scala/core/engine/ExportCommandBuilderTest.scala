@@ -44,10 +44,14 @@ class ExportCommandBuilderTest extends AnyFunSuite:
       fps = 60
     )
     val command = ExportCommandBuilder.buildCommand(timeline, settings)
-
+  
     val fpsIndex = command.arguments.indexOf("-r")
     assert(fpsIndex != -1 && command.arguments(fpsIndex + 1) == "60")
-
-    val sizeIndex = command.arguments.indexOf("-s")
-    assert(sizeIndex != -1 && command.arguments(sizeIndex + 1) == "1920x1080")
+  
+    val filterIndex = command.arguments.indexOf("-filter_complex")
+    assert(filterIndex != -1)
+  
+    val filterString = command.arguments(filterIndex + 1)
+    assert(filterString.contains("s=1920x1080"))
+    assert(filterString.contains("r=60"))
   }
