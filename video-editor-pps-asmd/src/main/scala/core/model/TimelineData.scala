@@ -1,53 +1,106 @@
 package core.model
 
+case class ClipTiming(
+                       startTime: Double,
+                       trimStart: Double,
+                       duration: Double
+                     ):
+  def endTime: Double = startTime + duration
+  def relativeTimeAt(globalTime: Double): Double = (globalTime - startTime) + trimStart
+  def contains(time: Double): Boolean = time >= startTime && time < endTime
+
+case class VolumePoint(time: Double, volume: Double)
+
 sealed trait MediaClip:
   def sourceUrl: String
   def sourceLength: Double
-  def startTime: Double
-  def trimStart: Double
-  def duration: Double
-  def withTimes(newStartTime: Double, newTrimStart: Double, newDuration: Double): MediaClip
+  def timing: ClipTiming
 
 case class VideoClip(
                       sourceUrl: String,
                       sourceLength: Double,
-                      startTime: Double,
-                      trimStart: Double,
-                      duration: Double,
+                      timing: ClipTiming,
                       effect: VideoEffect = VideoEffect.None
-                    ) extends MediaClip:
-  override def withTimes(newStartTime: Double, newTrimStart: Double, newDuration: Double): VideoClip =
-    this.copy(startTime = newStartTime, trimStart = newTrimStart, duration = newDuration)
+                    ) extends MediaClip
+
+object VideoClip:
+  def apply(
+             sourceUrl: String,
+             sourceLength: Double,
+             startTime: Double,
+             trimStart: Double,
+             duration: Double,
+             effect: VideoEffect
+           ): VideoClip =
+    VideoClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), effect)
+
+  def apply(
+             sourceUrl: String,
+             sourceLength: Double,
+             startTime: Double,
+             trimStart: Double,
+             duration: Double
+           ): VideoClip =
+    VideoClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), VideoEffect.None)
 
 case class AudioClip(
                       sourceUrl: String,
                       sourceLength: Double,
-                      startTime: Double,
-                      trimStart: Double,
-                      duration: Double,
-                      volumePoints: List[(Double, Double)] = List.empty
-                    ) extends MediaClip:
-  override def withTimes(newStartTime: Double, newTrimStart: Double, newDuration: Double): AudioClip =
-    this.copy(startTime = newStartTime, trimStart = newTrimStart, duration = newDuration)
+                      timing: ClipTiming,
+                      volumePoints: List[VolumePoint] = List.empty
+                    ) extends MediaClip
 
-case class VideoTrack(id: Int, clips: List[VideoClip])
-case class AudioTrack(id: Int, clips: List[AudioClip])
+object AudioClip:
+  def apply(
+             sourceUrl: String,
+             sourceLength: Double,
+             startTime: Double,
+             trimStart: Double,
+             duration: Double,
+             volumePoints: List[VolumePoint]
+           ): AudioClip =
+    AudioClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), volumePoints)
+
+  def apply(
+             sourceUrl: String,
+             sourceLength: Double,
+             startTime: Double,
+             trimStart: Double,
+             duration: Double
+           ): AudioClip =
+    AudioClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), List.empty)
+
+sealed trait Track[+C <: MediaClip]:
+  def id: Int
+  def clips: List[C]
+
+case class VideoTrack(id: Int, clips: List[VideoClip]) extends Track[VideoClip]
+case class AudioTrack(id: Int, clips: List[AudioClip]) extends Track[AudioClip]
 
 case class Timeline(
-                     videoTracks: List[VideoTrack],
-                     audioTracks: List[AudioTrack],
+                     videoTracks: List[VideoTrack] = List.empty,
+                     audioTracks: List[AudioTrack] = List.empty,
                      currentTime: Double = 0.0
                    )
 
 extension [C <: MediaClip](clip: C)
-  def containsTime(time: Double): Boolean =
-    time >= clip.startTime && time < (clip.startTime + clip.duration)
+  def startTime: Double = clip.timing.startTime
+  def duration: Double = clip.timing.duration
+  def trimStart: Double = clip.timing.trimStart
+  def endTime: Double = clip.timing.endTime
+
+  def containsTime(time: Double): Boolean = clip.timing.contains(time)
+  def relativeTimeAt(globalTime: Double): Double = clip.timing.relativeTimeAt(globalTime)
 
   def isSameAs(other: MediaClip): Boolean =
-    clip.sourceUrl == other.sourceUrl && Math.abs(clip.startTime - other.startTime) < 0.001
+    clip.sourceUrl == other.sourceUrl && Math.abs(clip.timing.startTime - other.timing.startTime) < 0.001
 
-  def relativeTimeAt(globalTime: Double): Double =
-    (globalTime - clip.startTime) + clip.trimStart
+  def withTimes(newStartTime: Double, newTrimStart: Double, newDuration: Double): C =
+    val newTiming = ClipTiming(newStartTime, newTrimStart, newDuration)
+    clip match
+      case v: VideoClip => v.copy(timing = newTiming).asInstanceOf[C]
+      case a: AudioClip => a.copy(timing = newTiming).asInstanceOf[C]
 
-  def endTime: Double =
-    clip.startTime + clip.duration
+  def withTiming(newTiming: ClipTiming): C = clip match
+    case v: VideoClip => v.copy(timing = newTiming).asInstanceOf[C]
+    case a: AudioClip => a.copy(timing = newTiming).asInstanceOf[C]

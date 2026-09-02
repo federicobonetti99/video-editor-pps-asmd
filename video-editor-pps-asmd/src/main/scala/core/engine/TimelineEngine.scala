@@ -29,15 +29,14 @@ object TimelineEngine:
                     timeline: Timeline,
                     trackId: Int,
                     clip: VideoClip,
-                    policy: InsertionPolicy = InsertAndShift
+                    policy: InsertionPolicy
                   ): Timeline =
-    modifyVideoTrack(timeline, trackId) { track =>
+    modifyVideoTrack(timeline, trackId): track =>
       val validated = validateClipDuration(clip)
       val updatedClips = policy match
         case InsertAndShift => resolveInsertAndShift(track.clips, validated)
         case Overwrite      => resolveOverwrite(track.clips, validated)
       track.copy(clips = updatedClips)
-    }
 
   def removeVideoClip(timeline: Timeline, trackId: Int, clipIndex: Int): Timeline =
     modifyVideoTrack(timeline, trackId)(track => track.copy(clips = removeClipGeneric(track.clips, clipIndex)))
@@ -57,7 +56,7 @@ object TimelineEngine:
                               clipIndex: Int,
                               effect: VideoEffect
                             ): Timeline =
-    modifyVideoTrack(timeline, trackId) { track =>
+    modifyVideoTrack(timeline, trackId): track =>
       if track.clips.isDefinedAt(clipIndex) then
         val updatedClips = track.clips.updated(
           clipIndex,
@@ -65,7 +64,6 @@ object TimelineEngine:
         )
         track.copy(clips = updatedClips)
       else track
-    }
 
   def moveClip[C <: MediaClip](timeline: Timeline, target: C, newStartTime: Double): Timeline =
     val safeStartTime = Math.max(0.0, newStartTime)
@@ -77,37 +75,29 @@ object TimelineEngine:
 
     target match
       case v: VideoClip =>
-        val updatedVideoTracks = timeline.videoTracks.map { track =>
+        val updatedVideoTracks = timeline.videoTracks.map: track =>
           if track.clips.exists(_.isSameAs(v)) then
             val otherClips = track.clips.filterNot(_.isSameAs(v))
-            val isOverlapping = otherClips.exists(hasOverlap)
-
-            if isOverlapping then track
+            if otherClips.exists(hasOverlap) then track
             else
-              val updatedClips = track.clips.map { clip =>
-                if clip.isSameAs(v) then clip.withTimes(safeStartTime, clip.trimStart, clip.duration).asInstanceOf[VideoClip]
+              val updatedClips = track.clips.map: clip =>
+                if clip.isSameAs(v) then clip.withTiming(clip.timing.copy(startTime = safeStartTime))
                 else clip
-              }
               track.copy(clips = updatedClips.sortBy(_.startTime))
           else track
-        }
         timeline.copy(videoTracks = updatedVideoTracks)
 
       case a: AudioClip =>
-        val updatedAudioTracks = timeline.audioTracks.map { track =>
+        val updatedAudioTracks = timeline.audioTracks.map: track =>
           if track.clips.exists(_.isSameAs(a)) then
             val otherClips = track.clips.filterNot(_.isSameAs(a))
-            val isOverlapping = otherClips.exists(hasOverlap)
-
-            if isOverlapping then track
+            if otherClips.exists(hasOverlap) then track
             else
-              val updatedClips = track.clips.map { clip =>
-                if clip.isSameAs(a) then clip.withTimes(safeStartTime, clip.trimStart, clip.duration).asInstanceOf[AudioClip]
+              val updatedClips = track.clips.map: clip =>
+                if clip.isSameAs(a) then clip.withTiming(clip.timing.copy(startTime = safeStartTime))
                 else clip
-              }
               track.copy(clips = updatedClips.sortBy(_.startTime))
           else track
-        }
         timeline.copy(audioTracks = updatedAudioTracks)
 
   def moveClipToTrack[C <: MediaClip](
@@ -125,62 +115,47 @@ object TimelineEngine:
 
     target match
       case v: VideoClip =>
-        val targetTrackOpt = timeline.videoTracks.find(_.id == targetTrackId)
-        targetTrackOpt match
+        timeline.videoTracks.find(_.id == targetTrackId) match
           case Some(destTrack) =>
-            val isSameTrack = destTrack.clips.exists(_.isSameAs(v))
-            val otherClipsInDest = if isSameTrack then destTrack.clips.filterNot(_.isSameAs(v)) else destTrack.clips
+            val otherClipsInDest = destTrack.clips.filterNot(_.isSameAs(v))
             if otherClipsInDest.exists(hasOverlap) then timeline
             else
-              val updatedSourceTracks = timeline.videoTracks.map { track =>
+              val updatedSourceTracks = timeline.videoTracks.map: track =>
                 if track.id == targetTrackId then
-                  val cleanClips = track.clips.filterNot(_.isSameAs(v))
-                  val updatedTarget = v.withTimes(safeStartTime, v.trimStart, v.duration).asInstanceOf[VideoClip]
-                  track.copy(clips = (updatedTarget :: cleanClips).sortBy(_.startTime))
+                  val updatedTarget = v.withTiming(v.timing.copy(startTime = safeStartTime))
+                  track.copy(clips = (updatedTarget :: otherClipsInDest).sortBy(_.startTime))
                 else
                   track.copy(clips = track.clips.filterNot(_.isSameAs(v)))
-              }
               timeline.copy(videoTracks = updatedSourceTracks)
           case None => timeline
 
       case a: AudioClip =>
-        val targetTrackOpt = timeline.audioTracks.find(_.id == targetTrackId)
-        targetTrackOpt match
+        timeline.audioTracks.find(_.id == targetTrackId) match
           case Some(destTrack) =>
-            val isSameTrack = destTrack.clips.exists(_.isSameAs(a))
-            val otherClipsInDest = if isSameTrack then destTrack.clips.filterNot(_.isSameAs(a)) else destTrack.clips
+            val otherClipsInDest = destTrack.clips.filterNot(_.isSameAs(a))
             if otherClipsInDest.exists(hasOverlap) then timeline
             else
-              val updatedSourceTracks = timeline.audioTracks.map { track =>
+              val updatedSourceTracks = timeline.audioTracks.map: track =>
                 if track.id == targetTrackId then
-                  val cleanClips = track.clips.filterNot(_.isSameAs(a))
-                  val updatedTarget = a.withTimes(safeStartTime, a.trimStart, a.duration).asInstanceOf[AudioClip]
-                  track.copy(clips = (updatedTarget :: cleanClips).sortBy(_.startTime))
+                  val updatedTarget = a.withTiming(a.timing.copy(startTime = safeStartTime))
+                  track.copy(clips = (updatedTarget :: otherClipsInDest).sortBy(_.startTime))
                 else
                   track.copy(clips = track.clips.filterNot(_.isSameAs(a)))
-              }
               timeline.copy(audioTracks = updatedSourceTracks)
           case None => timeline
 
   def getVideoClipsAtTime(timeline: Timeline, timestamp: Double): List[VideoClip] =
-    timeline.videoTracks.flatMap { track =>
-      track.clips.filter { clip =>
-        timestamp >= clip.startTime && timestamp < (clip.startTime + clip.duration)
-      }
-    }
+    timeline.videoTracks.flatMap: track =>
+      track.clips.filter(_.containsTime(timestamp))
 
   def getAudioClipsAtTime(timeline: Timeline, timestamp: Double): List[AudioClip] =
-    timeline.audioTracks.flatMap { track =>
-      track.clips.filter { clip =>
-        timestamp >= clip.startTime && timestamp < (clip.startTime + clip.duration)
-      }
-    }
+    timeline.audioTracks.flatMap: track =>
+      track.clips.filter(_.containsTime(timestamp))
 
   def addAudioClip(timeline: Timeline, trackId: Int, clip: AudioClip): Timeline =
-    modifyAudioTrack(timeline, trackId) { track =>
+    modifyAudioTrack(timeline, trackId): track =>
       val validated = validateClipDuration(clip)
       track.copy(clips = resolveInsertAndShift(track.clips, validated))
-    }
 
   def removeAudioClip(timeline: Timeline, trackId: Int, clipIndex: Int): Timeline =
     modifyAudioTrack(timeline, trackId)(track => track.copy(clips = removeClipGeneric(track.clips, clipIndex)))
@@ -201,9 +176,7 @@ object TimelineEngine:
     val audioClip = AudioClip(
       sourceUrl = videoClip.sourceUrl,
       sourceLength = videoClip.sourceLength,
-      startTime = videoClip.startTime,
-      trimStart = videoClip.trimStart,
-      duration = videoClip.duration,
+      timing = videoClip.timing,
       volumePoints = Nil
     )
     addAudioClip(timelineWithVideo, audioTrackId, audioClip)
@@ -219,9 +192,10 @@ object TimelineEngine:
     cutAudioClip(timelineWithVideoCut, audioTrackId, clipIndex, relativeCutTime)
 
   def snapAllTracks(timeline: Timeline): Timeline =
-    val updatedVideoTracks = timeline.videoTracks.map(t => t.copy(clips = snapClipsGeneric(t.clips)))
-    val updatedAudioTracks = timeline.audioTracks.map(t => t.copy(clips = snapClipsGeneric(t.clips)))
-    timeline.copy(videoTracks = updatedVideoTracks, audioTracks = updatedAudioTracks)
+    timeline.copy(
+      videoTracks = timeline.videoTracks.map(t => t.copy(clips = snapClipsGeneric(t.clips))),
+      audioTracks = timeline.audioTracks.map(t => t.copy(clips = snapClipsGeneric(t.clips)))
+    )
 
   def snapAllTracks(timeline: Timeline, videoTrackId: Int, audioTrackId: Int): Timeline =
     snapAllTracks(timeline)
@@ -237,117 +211,85 @@ object TimelineEngine:
       val nextTime = currentTime + (deltaTime * speed)
       if nextTime >= maxDuration then maxDuration else nextTime
 
+  def moveVideoClip(timeline: Timeline, trackId: Int, clipIndex: Int, newStartTime: Double): Timeline =
+    val clampedStartTime = Math.max(0.0, newStartTime)
+    modifyVideoTrack(timeline, trackId): track =>
+      if track.clips.isDefinedAt(clipIndex) then
+        val target = track.clips(clipIndex)
+        val updated = target.withTiming(target.timing.copy(startTime = clampedStartTime))
+        track.copy(clips = track.clips.updated(clipIndex, updated))
+      else track
+
+  def moveAudioClip(timeline: Timeline, trackId: Int, clipIndex: Int, newStartTime: Double): Timeline =
+    val clampedStartTime = Math.max(0.0, newStartTime)
+    modifyAudioTrack(timeline, trackId): track =>
+      if track.clips.isDefinedAt(clipIndex) then
+        val target = track.clips(clipIndex)
+        val updated = target.withTiming(target.timing.copy(startTime = clampedStartTime))
+        track.copy(clips = track.clips.updated(clipIndex, updated))
+      else track
+
   private def validateClipDuration[C <: MediaClip](clip: C): C =
     val maxAvailableDuration = clip.sourceLength - clip.trimStart
     if clip.duration > maxAvailableDuration then
-      clip.withTimes(clip.startTime, clip.trimStart, maxAvailableDuration).asInstanceOf[C]
+      clip.withTiming(clip.timing.copy(duration = maxAvailableDuration))
     else
       clip
 
   private def removeClipGeneric[C <: MediaClip](clips: List[C], clipIndex: Int): List[C] =
-    if clips.isDefinedAt(clipIndex) then
-      clips.patch(clipIndex, Nil, 1)
-    else
-      clips
+    if clips.isDefinedAt(clipIndex) then clips.patch(clipIndex, Nil, 1)
+    else clips
 
   private def cutClipGeneric[C <: MediaClip](clips: List[C], clipIndex: Int, relativeCutTime: Double): List[C] =
     if clips.isDefinedAt(clipIndex) then
       val originalClip = clips(clipIndex)
-
       if relativeCutTime <= 0.0 || relativeCutTime >= originalClip.duration then
         clips
       else
-        val leftClip = originalClip.withTimes(
-          newStartTime = originalClip.startTime,
-          newTrimStart = originalClip.trimStart,
-          newDuration = relativeCutTime
-        ).asInstanceOf[C]
-
-        val rightClip = originalClip.withTimes(
-          newStartTime = originalClip.startTime + relativeCutTime,
-          newTrimStart = originalClip.trimStart + relativeCutTime,
-          newDuration = originalClip.duration - relativeCutTime
-        ).asInstanceOf[C]
-
+        val leftClip = originalClip.withTiming(
+          originalClip.timing.copy(duration = relativeCutTime)
+        )
+        val rightClip = originalClip.withTiming(
+          ClipTiming(
+            startTime = originalClip.startTime + relativeCutTime,
+            trimStart = originalClip.trimStart + relativeCutTime,
+            duration = originalClip.duration - relativeCutTime
+          )
+        )
         clips.patch(clipIndex, List(leftClip, rightClip), 1)
     else
       clips
 
   private def snapClipsGeneric[C <: MediaClip](clips: List[C]): List[C] =
     clips.sortBy(_.startTime).foldLeft(List.empty[C]): (accumulated, currentClip) =>
-      accumulated.lastOption match
-        case Some(lastClip) =>
-          val nextStartTime = lastClip.startTime + lastClip.duration
-          accumulated :+ currentClip.withTimes(
-            newStartTime = nextStartTime,
-            newTrimStart = currentClip.trimStart,
-            newDuration = currentClip.duration
-          ).asInstanceOf[C]
-        case None =>
-          accumulated :+ currentClip.withTimes(
-            newStartTime = 0.0,
-            newTrimStart = currentClip.trimStart,
-            newDuration = currentClip.duration
-          ).asInstanceOf[C]
+      val nextStartTime = accumulated.lastOption.map(_.endTime).getOrElse(0.0)
+      accumulated :+ currentClip.withTiming(currentClip.timing.copy(startTime = nextStartTime))
 
   private def resolveInsertAndShift[C <: MediaClip](existingClips: List[C], newClip: C): List[C] =
     val insertTime = newClip.startTime
     val insertDuration = newClip.duration
     val insertEnd = insertTime + insertDuration
 
-    val processedClips = existingClips.flatMap { clip =>
-      val clipEnd = clip.startTime + clip.duration
-
+    val processedClips = existingClips.flatMap: clip =>
+      val clipEnd = clip.endTime
       if clipEnd <= insertTime then
         List(clip)
       else if clip.startTime >= insertTime then
-        List(clip.withTimes(
-          newStartTime = clip.startTime + insertDuration,
-          newTrimStart = clip.trimStart,
-          newDuration = clip.duration
-        ).asInstanceOf[C])
+        List(clip.withTiming(clip.timing.copy(startTime = clip.startTime + insertDuration)))
       else
         val firstPartDuration = insertTime - clip.startTime
         val secondPartDuration = clip.duration - firstPartDuration
-
-        val firstPart = clip.withTimes(
-          newStartTime = clip.startTime,
-          newTrimStart = clip.trimStart,
-          newDuration = firstPartDuration
-        ).asInstanceOf[C]
-
-        val secondPart = clip.withTimes(
-          newStartTime = insertEnd,
-          newTrimStart = clip.trimStart + firstPartDuration,
-          newDuration = secondPartDuration
-        ).asInstanceOf[C]
-
+        val firstPart = clip.withTiming(clip.timing.copy(duration = firstPartDuration))
+        val secondPart = clip.withTiming(
+          ClipTiming(
+            startTime = insertEnd,
+            trimStart = clip.trimStart + firstPartDuration,
+            duration = secondPartDuration
+          )
+        )
         List(firstPart, secondPart)
-    }
 
     (newClip :: processedClips).sortBy(_.startTime)
-
-  def moveVideoClip(timeline: Timeline, trackId: Int, clipIndex: Int, newStartTime: Double): Timeline =
-    val clampedStartTime = Math.max(0.0, newStartTime)
-    timeline.copy(
-      videoTracks = timeline.videoTracks.map { track =>
-        if track.id == trackId && track.clips.isDefinedAt(clipIndex) then
-          val updatedClips = track.clips.updated(clipIndex, track.clips(clipIndex).copy(startTime = clampedStartTime))
-          track.copy(clips = updatedClips)
-        else track
-      }
-    )
-
-  def moveAudioClip(timeline: Timeline, trackId: Int, clipIndex: Int, newStartTime: Double): Timeline =
-    val clampedStartTime = Math.max(0.0, newStartTime)
-    timeline.copy(
-      audioTracks = timeline.audioTracks.map { track =>
-        if track.id == trackId && track.clips.isDefinedAt(clipIndex) then
-          val updatedClips = track.clips.updated(clipIndex, track.clips(clipIndex).copy(startTime = clampedStartTime))
-          track.copy(clips = updatedClips)
-        else track
-      }
-    )
 
   private def resolveOverwrite[C <: MediaClip](existingClips: List[C], newClip: C): List[C] =
     (newClip :: existingClips).sortBy(_.startTime)
