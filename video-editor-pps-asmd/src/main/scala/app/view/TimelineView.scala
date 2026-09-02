@@ -8,6 +8,7 @@ import scalafx.scene.layout.{HBox, Priority, Region, StackPane, VBox}
 import scalafx.beans.property.ObjectProperty
 import core.model.*
 import app.view.components.*
+import view.EffectInspectorPane
 
 class TimelineView(
                     val onDeleteRequested: () => Unit = () => (),
@@ -60,13 +61,22 @@ class TimelineView(
     maxHeight = 270.0
     mouseTransparent = true
 
-  private val rightMask = new Region:
+  private val rightMaskBackground = new Region:
+    prefHeight = 270.0
+    minHeight = 270.0
+    maxHeight = 270.0
+    style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 0 0 0 1px;"
+
+  private val effectInspector = new EffectInspectorPane(effect => onEffectSelected(effect))
+
+  private val rightMask = new StackPane:
     hgrow = Priority.Always
     minWidth = 0.0
     prefHeight = 270.0
     minHeight = 270.0
     maxHeight = 270.0
-    style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 0 0 0 1px;"
+    alignment = Pos.TopLeft
+    children = Seq(rightMaskBackground, effectInspector)
 
   private val sideMasksRow = new HBox:
     alignment = Pos.Center
@@ -78,6 +88,7 @@ class TimelineView(
 
   HBox.setHgrow(leftMask, Priority.Always)
   HBox.setHgrow(rightMask, Priority.Always)
+  StackPane.setAlignment(effectInspector, Pos.TopLeft)
 
   private val zoomLabel = new Label("Zoom:"):
     style = "-fx-text-fill: #aaaaaa; -fx-font-size: 11px;"
@@ -183,9 +194,15 @@ class TimelineView(
       case Some(SelectedClip.SelectedVideo(_, v)) =>
         toolbar.setSelectedEffect(v.effect)
         toolbar.setEffectControlsVisible(true)
+        effectInspector.updateSelection(Some(v))
+      case Some(SelectedClip.SelectedAudio(_, a)) =>
+        toolbar.setSelectedEffect(VideoEffect.None)
+        toolbar.setEffectControlsVisible(false)
+        effectInspector.updateSelection(Some(a))
       case _ =>
         toolbar.setSelectedEffect(VideoEffect.None)
         toolbar.setEffectControlsVisible(false)
+        effectInspector.updateSelection(None)
 
     onClipSelected(targetOpt)
     currentTimelineProperty.value.foreach(render)

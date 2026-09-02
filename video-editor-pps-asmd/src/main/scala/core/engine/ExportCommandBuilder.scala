@@ -1,8 +1,9 @@
 package core.engine
 
 import core.model.*
-import java.net.URI
+import java.net.{URI, URLDecoder}
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 object ExportCommandBuilder:
@@ -12,34 +13,43 @@ object ExportCommandBuilder:
 
   private def extractFilePath(url: String): String =
     try
-      val uri = URI.create(url)
+      val cleanUrl = URLDecoder.decode(url, StandardCharsets.UTF_8.name())
+      val uri = URI.create(cleanUrl)
       if uri.getScheme == "file" then new File(uri).getAbsolutePath
-      else url.stripPrefix("file:")
+      else cleanUrl.stripPrefix("file:")
     catch
-      case _: Throwable => url.stripPrefix("file:").stripPrefix("/")
+      case _: Throwable =>
+        URLDecoder.decode(url.stripPrefix("file:").stripPrefix("/"), StandardCharsets.UTF_8.name())
 
-  private def formatEffect(effect: VideoEffect, clipDuration: Double): String =
+  private def formatEffect(effect: VideoEffect, clipDuration: Double): Option[String] =
     val safeDuration = Math.max(0.001, clipDuration)
     effect match
-      case VideoEffect.None => ""
-      case VideoEffect.Grayscale => ",hue=s=0"
-      case VideoEffect.Sepia => ",colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131"
-      case VideoEffect.Invert => ",negate"
+      case VideoEffect.None => None
+      case VideoEffect.Grayscale => Some("hue=s=0")
+      case VideoEffect.Sepia => Some("colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131")
+      case VideoEffect.Invert => Some("negate")
       case VideoEffect.Brightness(level) =>
         val b = fmt(Math.max(-1.0, Math.min(1.0, level)))
-        s",eq=brightness=$b"
+        Some(s"eq=brightness=$b")
       case VideoEffect.FadeIn(duration) =>
         val fadeDur = Math.min(duration, safeDuration)
-        s",fade=t=in:st=0:d=${fmt(fadeDur)}"
+        Some(s"fade=t=in:st=0:d=${fmt(fadeDur)}")
       case VideoEffect.ZoomIn(targetScale) =>
-        val zExpr = s"1.0+(${fmt(targetScale)}-1.0)*min(1.0,t/${fmt(safeDuration)})"
-        s",scale=eval=frame:w='iw*($zExpr)':h='ih*($zExpr)',crop=w='iw/($zExpr)':h='ih/($zExpr)':x='(in_w-out_w)/2':y='(in_h-out_h)/2'"
+        val target = Math.max(1.01, targetScale)
+        val zExpr = s"1.0+(${fmt(target)}-1.0)*min(1.0,t/${fmt(safeDuration)})"
+        val cropW = s"trunc(iw/($zExpr)/2)*2"
+        val cropH = s"trunc(ih/($zExpr)/2)*2"
+        Some(s"crop=w=$cropW:h=$cropH:x=(iw-ow)/2:y=(ih-oh)/2")
       case VideoEffect.Shake(intensity, frequency) =>
-        val maxOffset = fmt(intensity * 2, 1)
+        val offsetInt = Math.max(2, (intensity.toInt * 2) / 2 * 2)
         val wx = fmt(2 * Math.PI * frequency, 4)
         val wy = fmt(2 * Math.PI * (frequency * 1.3), 4)
         val intVal = fmt(intensity, 2)
-        s",crop=w='iw-$maxOffset':h='ih-$maxOffset':x='$intVal+$intVal*sin($wx*t)':y='$intVal+$intVal*cos($wy*t)',scale=w='iw+$maxOffset':h='ih+$maxOffset'"
+        val cropW = s"iw-$offsetInt"
+        val cropH = s"ih-$offsetInt"
+        val xExpr = s"trunc(($intVal+$intVal*sin($wx*t))/2)*2"
+        val yExpr = s"trunc(($intVal+$intVal*cos($wy*t))/2)*2"
+        Some(s"crop=w=$cropW:h=$cropH:x=$xExpr:y=$yExpr")
 
   def buildCommand(timeline: Timeline, settings: ExportSettings): ExportCommand =
     val videoClipsWithTrack = timeline.videoTracks.sortBy(_.id).flatMap(t => t.clips.map(c => (t.id, c)))
@@ -61,11 +71,18 @@ object ExportCommandBuilder:
 
     val videoFilterParts = videoClipsWithTrack.zipWithIndex.map { case ((_, clip), idx) =>
       val fileIdx = fileIndexMap(extractFilePath(clip.sourceUrl))
-      val effectFilter = formatEffect(clip.effect, clip.duration)
       val scaleFilter = s"scale=${settings.width}:${settings.height}:force_original_aspect_ratio=decrease,pad=${settings.width}:${settings.height}:(ow-iw)/2:(oh-ih)/2"
-      val trimAndEffect = s"trim=start=${fmt(clip.trimStart)}:duration=${fmt(clip.duration)},setpts=PTS-STARTPTS$effectFilter,setpts=PTS-STARTPTS+${fmt(clip.startTime)}/TB"
 
-      s"[$fileIdx:v]$trimAndEffect,$scaleFilter,setsar=1[v$idx]"
+      val clipChain = Seq(
+        Some(s"trim=start=${fmt(clip.trimStart)}:duration=${fmt(clip.duration)}"),
+        Some("setpts=PTS-STARTPTS"),
+        formatEffect(clip.effect, clip.duration),
+        Some(scaleFilter),
+        Some(s"setpts=PTS-STARTPTS+${fmt(clip.startTime)}/TB"),
+        Some("setsar=1")
+      ).flatten.mkString(",")
+
+      s"[$fileIdx:v]$clipChain[v$idx]"
     }
 
     val overlayChains = videoClipsWithTrack.indices.map { idx =>
