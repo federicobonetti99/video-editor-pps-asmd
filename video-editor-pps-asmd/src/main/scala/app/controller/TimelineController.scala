@@ -1,6 +1,6 @@
 package app.controller
 
-import app.utils.MediaImporter
+import app.utils.{ImportedMedia, MediaImporter}
 import scalafx.Includes.*
 import scalafx.application.Platform
 import scalafx.geometry.{Insets, Pos}
@@ -14,6 +14,7 @@ import core.engine.*
 import app.view.TimelineView
 import app.view.components.{ActiveAudioTrackInfo, SelectedClip}
 import scalafx.animation.AnimationTimer
+
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -209,30 +210,49 @@ class TimelineController:
 
   private def handleImport(): Unit =
     val currentWindow = view.getScene.getWindow
-    MediaImporter.chooseVideoFile(currentWindow).foreach { case (file, durataReale) =>
-      val current = state.get()
-      val fileUrl = file.toURI.toString
+    MediaImporter.chooseGenericMedia(currentWindow).foreach {
+      case ImportedMedia.Video(file, duration) =>
+        val current = state.get()
+        val fileUrl = file.toURI.toString
+        val targetVideoTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
+        val targetAudioTrackId = current.timeline.audioTracks.headOption.map(_.id).getOrElse(1)
 
-      val targetVideoTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
-      val targetAudioTrackId = current.timeline.audioTracks.headOption.map(_.id).getOrElse(1)
+        val importedClip = VideoClip(
+          sourceUrl = fileUrl,
+          sourceLength = duration,
+          startTime = current.currentTime,
+          trimStart = 0.0,
+          duration = duration,
+          effect = VideoEffect.None
+        )
 
-      val importedClip = VideoClip(
-        sourceUrl = fileUrl,
-        sourceLength = durataReale,
-        startTime = current.currentTime,
-        trimStart = 0.0,
-        duration = durataReale,
-        effect = VideoEffect.None
-      )
+        val updatedTimeline = TimelineEngine.importVideoWithAudio(
+          timeline = current.timeline,
+          videoTrackId = targetVideoTrackId,
+          audioTrackId = targetAudioTrackId,
+          videoClip = importedClip
+        )
+        updateTimelineState(updatedTimeline)
 
-      val updatedTimeline = TimelineEngine.importVideoWithAudio(
-        timeline = current.timeline,
-        videoTrackId = targetVideoTrackId,
-        audioTrackId = targetAudioTrackId,
-        videoClip = importedClip
-      )
+      case ImportedMedia.Audio(file, duration) =>
+        val current = state.get()
+        val fileUrl = file.toURI.toString
+        val targetAudioTrackId = current.timeline.audioTracks.headOption.map(_.id).getOrElse(1)
 
-      updateTimelineState(updatedTimeline)
+        val importedClip = AudioClip(
+          sourceUrl = fileUrl,
+          sourceLength = duration,
+          startTime = current.currentTime,
+          trimStart = 0.0,
+          duration = duration
+        )
+
+        val updatedTimeline = TimelineEngine.addAudioClip(
+          timeline = current.timeline,
+          trackId = targetAudioTrackId,
+          clip = importedClip
+        )
+        updateTimelineState(updatedTimeline)
     }
 
   private def handleExport(): Unit =
