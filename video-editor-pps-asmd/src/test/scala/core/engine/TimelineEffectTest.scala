@@ -2,6 +2,7 @@ package core.engine
 
 import org.scalatest.funsuite.AnyFunSuite
 import core.model.*
+import org.scalatest.matchers.should.Matchers.shouldBe
 
 class TimelineEffectTest extends AnyFunSuite:
 
@@ -91,4 +92,27 @@ class TimelineEffectTest extends AnyFunSuite:
 
     assert(transformAtQuarterSec.translateX != 0.0)
     assert(transformAtQuarterSec.translateY != 0.0)
+  }
+
+  test("Applying an effect to an image clip updates the effect on the image") {
+    val imageClip = ImageClip.create(
+      sourceUrl = "file://image.png",
+      startTime = 0.0,
+      duration = 5.0
+    )
+    val timelineWithImage = Timeline(
+      videoTracks = List(VideoTrack(id = 1, clips = List(imageClip))),
+      audioTracks = Nil
+    )
+  
+    val updatedTimeline = TimelineEngine.applyEffectToVideoClip(
+      timelineWithImage,
+      trackId = 1,
+      clipIndex = 0,
+      effect = VideoEffect.Sepia
+    )
+  
+    val updatedClip = updatedTimeline.videoTracks.head.clips.head
+    assert(updatedClip.isInstanceOf[ImageClip])
+    assert(updatedClip.effect == VideoEffect.Sepia)
   }

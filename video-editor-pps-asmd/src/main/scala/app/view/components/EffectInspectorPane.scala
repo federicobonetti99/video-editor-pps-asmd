@@ -4,7 +4,7 @@ import scalafx.Includes.*
 import scalafx.scene.layout.{HBox, VBox}
 import scalafx.scene.control.{Label, TextField}
 import scalafx.geometry.{Insets, Pos}
-import core.model.{AudioClip, MediaClip, VideoClip, VideoEffect}
+import core.model.{AudioClip, MediaClip, VisualClip, VideoEffect}
 
 class EffectInspectorPane(
                            onEffectChanged: VideoEffect => Unit,
@@ -25,7 +25,7 @@ class EffectInspectorPane(
       case None =>
         ()
 
-      case Some(videoClip: VideoClip) =>
+      case Some(videoClip: VisualClip) =>
         renderControlsFor(videoClip.effect, videoClip.timing.duration)
 
       case Some(audioClip: AudioClip) =>

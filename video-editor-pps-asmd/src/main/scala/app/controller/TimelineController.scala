@@ -134,7 +134,7 @@ class TimelineController:
   private def findAudioTrack(id: Int): Option[AudioTrack] =
     state.get().timeline.audioTracks.find(_.id == id)
 
-  private def getActiveVideoClip(): Option[VideoClip] =
+  private def getActiveVideoClip(): Option[VisualClip] =
     val current = state.get()
     current.timeline.videoTracks
       .sortBy(_.id)
@@ -246,6 +246,25 @@ class TimelineController:
           clip = importedClip
         )
         updateTimelineState(updatedTimeline)
+
+      case ImportedMedia.Image(file, defaultDuration) =>
+        val current = state.get()
+        val fileUrl = file.toURI.toString
+        val targetVideoTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
+
+        val imageClip = ImageClip.create(
+          sourceUrl = fileUrl,
+          startTime = current.currentTime,
+          duration = defaultDuration,
+          effect = VideoEffect.None
+        )
+
+        val updatedTimeline = TimelineEngine.addVideoClip(
+          timeline = current.timeline,
+          trackId = targetVideoTrackId,
+          clip = imageClip
+        )
+        updateTimelineState(updatedTimeline)
     }
 
   private def handleExport(): Unit =
@@ -353,7 +372,7 @@ class TimelineController:
           val idx = track.clips.indexWhere(_.isSameAs(selVideo))
           if idx != -1 then
             val updatedTimeline = TimelineEngine.applyEffectToVideoClip(current.timeline, trackId, idx, effect)
-            val updatedClip = track.clips(idx).copy(effect = effect)
+            val updatedClip = track.clips(idx).withEffect(effect)
             view.selectClip(Some(SelectedClip.SelectedVideo(trackId, updatedClip)))
             updateTimelineState(updatedTimeline)
         }

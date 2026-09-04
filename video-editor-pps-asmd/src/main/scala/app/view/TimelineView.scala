@@ -211,7 +211,7 @@ class TimelineView(
     onClipSelected(targetOpt)
     currentTimelineProperty.value.foreach(render)
 
-  def toggleVideoSelection(trackId: Int, clip: VideoClip): Unit =
+  def toggleVideoSelection(trackId: Int, clip: VisualClip): Unit =
     val isAlreadySelected = selectedClipProperty.value.exists:
       case SelectedClip.SelectedVideo(tid, v) => tid == trackId && clip.isSameAs(v)
       case _                                  => false

@@ -9,11 +9,13 @@ import scala.sys.process.*
 enum ImportedMedia:
   case Video(file: File, duration: Double)
   case Audio(file: File, duration: Double)
+  case Image(file: File, defaultDuration: Double = 5.0)
 
 object MediaImporter:
 
   private val videoExts = Set("mp4", "mkv", "avi", "mov")
   private val audioExts = Set("mp3", "wav", "aac", "m4a", "ogg")
+  private val imageExts = Set("png", "jpg", "jpeg", "bmp", "gif", "webp")
 
   private def toFilterPatterns(exts: Set[String]): Seq[String] =
     exts.toSeq.flatMap(ext => Seq(s"*.$ext", s"*.${ext.toUpperCase}"))
@@ -36,18 +38,23 @@ object MediaImporter:
     val fileChooser = new FileChooser:
       title = "Seleziona file Multimediale"
       extensionFilters.addAll(
-        new FileChooser.ExtensionFilter("Media Files", toFilterPatterns(videoExts ++ audioExts)),
+        new FileChooser.ExtensionFilter("Tutti i file multimediali", toFilterPatterns(videoExts ++ audioExts ++ imageExts)),
         new FileChooser.ExtensionFilter("Video Files", toFilterPatterns(videoExts)),
-        new FileChooser.ExtensionFilter("Audio Files", toFilterPatterns(audioExts))
+        new FileChooser.ExtensionFilter("Audio Files", toFilterPatterns(audioExts)),
+        new FileChooser.ExtensionFilter("Image Files", toFilterPatterns(imageExts))
       )
 
     Option(fileChooser.showOpenDialog(parentWindow)).flatMap { file =>
       val ext = file.getName.split('.').lastOption.map(_.toLowerCase).getOrElse("")
-      val duration = getDuration(file)
 
-      if videoExts.contains(ext) then Some(ImportedMedia.Video(file, duration))
-      else if audioExts.contains(ext) then Some(ImportedMedia.Audio(file, duration))
-      else None
+      if videoExts.contains(ext) then
+        Some(ImportedMedia.Video(file, getDuration(file)))
+      else if audioExts.contains(ext) then
+        Some(ImportedMedia.Audio(file, getDuration(file)))
+      else if imageExts.contains(ext) then
+        Some(ImportedMedia.Image(file, defaultDuration = 5.0))
+      else
+        None
     }
 
   private def getDuration(file: File): Double =

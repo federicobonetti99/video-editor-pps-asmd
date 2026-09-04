@@ -14,15 +14,15 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
 enum SelectedClip:
-  case SelectedVideo(trackId: Int, clip: VideoClip)
+  case SelectedVideo(trackId: Int, clip: VisualClip)
   case SelectedAudio(trackId: Int, clip: AudioClip)
 
 class TimelinePanel(
                      private var pixelsPerSecond: Double = 30.0,
                      trackHeight: Double = 50.0,
-                     val onVideoClipClicked: (Int, VideoClip) => Unit = (_, _) => (),
+                     val onVideoClipClicked: (Int, VisualClip) => Unit = (_, _) => (),
                      val onAudioClipClicked: (Int, AudioClip) => Unit = (_, _) => (),
-                     val onVideoClipMoved: (VideoClip, Int, Double) => Unit = (_, _, _) => (),
+                     val onVideoClipMoved: (VisualClip, Int, Double) => Unit = (_, _, _) => (),
                      val onAudioClipMoved: (AudioClip, Int, Double) => Unit = (_, _, _) => (),
                      val onSeekRequested: Double => Unit = _ => ()
                    ) extends Pane:

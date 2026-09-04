@@ -99,8 +99,8 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
 
   test("Snap clips together to remove gaps and overlaps inside a video track") {
     val clip1 = VideoClip("v1.mp4", startTime = 0.0, trimStart = 0.0, duration = 5.0, sourceLength = 10.0, effect = VideoEffect.None)
-    val clip2 = VideoClip("v2.mp4", startTime = 2.0, trimStart = 0.0, duration = 4.0, sourceLength = 10.0, effect = VideoEffect.None) // Overlaps clip1!
-    val clip3 = VideoClip("v3.mp4", startTime = 20.0, trimStart = 0.0, duration = 3.0, sourceLength = 10.0, effect = VideoEffect.None) // Leaves a huge gap!
+    val clip2 = VideoClip("v2.mp4", startTime = 2.0, trimStart = 0.0, duration = 4.0, sourceLength = 10.0, effect = VideoEffect.None)
+    val clip3 = VideoClip("v3.mp4", startTime = 20.0, trimStart = 0.0, duration = 3.0, sourceLength = 10.0, effect = VideoEffect.None)
 
     val messyTrack = VideoTrack(id = 1, clips = List(clip1, clip2, clip3))
     val timelineWithMessyTrack = Timeline(videoTracks = List(messyTrack), audioTracks = List.empty)
@@ -345,10 +345,8 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
       )
     )
 
-    // At t = 2.0 only clip1 is playing
     TimelineEngine.getAudioClipsAtTime(timeline, timestamp = 2.0) shouldBe List(clip1)
 
-    // At t = 7.0 both clips overlap on different tracks
     val activeAtSeven = TimelineEngine.getAudioClipsAtTime(timeline, timestamp = 7.0)
     activeAtSeven should have size 2
     activeAtSeven should contain allOf(clip1, clip2)
@@ -432,4 +430,49 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
     )
 
     updatedTimeline shouldBe timeline
+  }
+
+  test("Add an ImageClip to a video track and verify its properties") {
+    val imageClip = ImageClip.create(
+      sourceUrl = "photo.png",
+      startTime = 2.0,
+      duration = 5.0
+    )
+
+    val updatedTimeline = TimelineEngine.addVideoClip(initialTimeline, trackId = 1, clip = imageClip)
+    val clips = updatedTimeline.videoTracks.head.clips
+
+    clips should have size 1
+    clips.head shouldBe a[ImageClip]
+    clips.head.startTime shouldBe 2.0
+    clips.head.duration shouldBe 5.0
+    clips.head.sourceUrl shouldBe "photo.png"
+  }
+
+  test("VideoTrack supports both VideoClip and ImageClip on the same track") {
+    val imageClip = ImageClip.create(sourceUrl = "photo.png", startTime = 15.0, duration = 5.0)
+
+    val t1 = TimelineEngine.addVideoClip(initialTimeline, trackId = 1, clip = sampleClip)
+    val t2 = TimelineEngine.addVideoClip(t1, trackId = 1, clip = imageClip)
+
+    val clips = t2.videoTracks.head.clips
+    clips should have size 2
+    clips.exists(_.isInstanceOf[VideoClip]) shouldBe true
+    clips.exists(_.isInstanceOf[ImageClip]) shouldBe true
+  }
+
+  test("Cutting an ImageClip preserves ImageClip concrete type for both halves") {
+    val imageClip = ImageClip.create(sourceUrl = "photo.png", startTime = 0.0, duration = 6.0)
+    val timelineWithImage = TimelineEngine.addVideoClip(initialTimeline, trackId = 1, clip = imageClip)
+
+    val cutTimeline = TimelineEngine.cutVideoClip(timelineWithImage, trackId = 1, clipIndex = 0, relativeCutTime = 2.5)
+    val clips = cutTimeline.videoTracks.head.clips
+
+    clips should have size 2
+    clips(0) shouldBe a[ImageClip]
+    clips(1) shouldBe a[ImageClip]
+
+    clips(0).duration shouldBe 2.5
+    clips(1).duration shouldBe 3.5
+    clips(1).startTime shouldBe 2.5
   }

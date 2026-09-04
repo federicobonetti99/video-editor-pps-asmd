@@ -16,12 +16,17 @@ sealed trait MediaClip:
   def sourceLength: Double
   def timing: ClipTiming
 
+sealed trait VisualClip extends MediaClip:
+  def effect: VideoEffect
+  def withEffect(newEffect: VideoEffect): VisualClip
+
 case class VideoClip(
                       sourceUrl: String,
                       sourceLength: Double,
                       timing: ClipTiming,
                       effect: VideoEffect = VideoEffect.None
-                    ) extends MediaClip
+                    ) extends VisualClip:
+  override def withEffect(newEffect: VideoEffect): VideoClip = copy(effect = newEffect)
 
 object VideoClip:
   def apply(
@@ -42,6 +47,42 @@ object VideoClip:
              duration: Double
            ): VideoClip =
     VideoClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), VideoEffect.None)
+
+case class ImageClip(
+                      sourceUrl: String,
+                      sourceLength: Double = Double.PositiveInfinity,
+                      timing: ClipTiming,
+                      effect: VideoEffect = VideoEffect.None
+                    ) extends VisualClip:
+  override def withEffect(newEffect: VideoEffect): ImageClip = copy(effect = newEffect)
+
+object ImageClip:
+  def create(
+              sourceUrl: String,
+              startTime: Double,
+              duration: Double = 5.0,
+              effect: VideoEffect = VideoEffect.None
+            ): ImageClip =
+    ImageClip(
+      sourceUrl = sourceUrl,
+      sourceLength = Double.PositiveInfinity,
+      timing = ClipTiming(startTime = startTime, trimStart = 0.0, duration = duration),
+      effect = effect
+    )
+
+  def apply(
+             sourceUrl: String,
+             sourceLength: Double,
+             startTime: Double,
+             trimStart: Double,
+             duration: Double
+           ): ImageClip =
+    ImageClip(
+      sourceUrl = sourceUrl,
+      sourceLength = sourceLength,
+      timing = ClipTiming(startTime = startTime, trimStart = trimStart, duration = duration),
+      effect = VideoEffect.None
+    )
 
 case class AudioClip(
                       sourceUrl: String,
@@ -86,7 +127,7 @@ sealed trait Track[+C <: MediaClip]:
   def id: Int
   def clips: List[C]
 
-case class VideoTrack(id: Int, clips: List[VideoClip]) extends Track[VideoClip]
+case class VideoTrack(id: Int, clips: List[VisualClip]) extends Track[VisualClip]
 case class AudioTrack(id: Int, clips: List[AudioClip]) extends Track[AudioClip]
 
 case class Timeline(
@@ -118,10 +159,22 @@ extension [C <: MediaClip](clip: C)
 
   def withTimes(newStartTime: Double, newTrimStart: Double, newDuration: Double): C =
     val newTiming = ClipTiming(newStartTime, newTrimStart, newDuration)
-    clip match
-      case v: VideoClip => v.copy(timing = newTiming).asInstanceOf[C]
-      case a: AudioClip => a.copy(timing = newTiming).asInstanceOf[C]
+    val res = clip match
+      case v: VideoClip => v.copy(timing = newTiming)
+      case i: ImageClip => i.copy(timing = newTiming)
+      case a: AudioClip => a.copy(timing = newTiming)
+    res.asInstanceOf[C]
 
-  def withTiming(newTiming: ClipTiming): C = clip match
-    case v: VideoClip => v.copy(timing = newTiming).asInstanceOf[C]
-    case a: AudioClip => a.copy(timing = newTiming).asInstanceOf[C]
+  def withTiming(newTiming: ClipTiming): C =
+    val res = clip match
+      case v: VideoClip => v.copy(timing = newTiming)
+      case i: ImageClip => i.copy(timing = newTiming)
+      case a: AudioClip => a.copy(timing = newTiming)
+    res.asInstanceOf[C]
+
+extension [V <: VisualClip](clip: V)
+  def withEffect(newEffect: VideoEffect): V =
+    val res = clip match
+      case v: VideoClip => v.copy(effect = newEffect)
+      case i: ImageClip => i.copy(effect = newEffect)
+    res.asInstanceOf[V]

@@ -22,13 +22,13 @@ object TimelineEngine:
   def removeAudioTrack(timeline: Timeline, trackId: Int): Timeline =
     timeline.copy(audioTracks = timeline.audioTracks.filterNot(_.id == trackId))
 
-  def addVideoClip(timeline: Timeline, trackId: Int, clip: VideoClip): Timeline =
+  def addVideoClip(timeline: Timeline, trackId: Int, clip: VisualClip): Timeline =
     addVideoClip(timeline, trackId, clip, InsertAndShift)
 
   def addVideoClip(
                     timeline: Timeline,
                     trackId: Int,
-                    clip: VideoClip,
+                    clip: VisualClip,
                     policy: InsertionPolicy
                   ): Timeline =
     modifyVideoTrack(timeline, trackId): track =>
@@ -60,7 +60,7 @@ object TimelineEngine:
       if track.clips.isDefinedAt(clipIndex) then
         val updatedClips = track.clips.updated(
           clipIndex,
-          track.clips(clipIndex).copy(effect = effect)
+          track.clips(clipIndex).withEffect(effect)
         )
         track.copy(clips = updatedClips)
       else track
@@ -89,7 +89,7 @@ object TimelineEngine:
       Math.max(safeStartTime, other.startTime) < Math.min(targetEndTime, otherEndTime)
 
     target match
-      case v: VideoClip =>
+      case v: VisualClip =>
         val updatedVideoTracks = timeline.videoTracks.map: track =>
           if track.clips.exists(_.isSameAs(v)) then
             val otherClips = track.clips.filterNot(_.isSameAs(v))
@@ -115,6 +115,8 @@ object TimelineEngine:
           else track
         timeline.copy(audioTracks = updatedAudioTracks)
 
+      case _ => timeline
+
   def moveClipToTrack[C <: MediaClip](
                                        timeline: Timeline,
                                        target: C,
@@ -129,7 +131,7 @@ object TimelineEngine:
       Math.max(safeStartTime, other.startTime) < Math.min(targetEndTime, otherEndTime)
 
     target match
-      case v: VideoClip =>
+      case v: VisualClip =>
         timeline.videoTracks.find(_.id == targetTrackId) match
           case Some(destTrack) =>
             val otherClipsInDest = destTrack.clips.filterNot(_.isSameAs(v))
@@ -159,7 +161,9 @@ object TimelineEngine:
               timeline.copy(audioTracks = updatedSourceTracks)
           case None => timeline
 
-  def getVideoClipsAtTime(timeline: Timeline, timestamp: Double): List[VideoClip] =
+      case _ => timeline
+
+  def getVideoClipsAtTime(timeline: Timeline, timestamp: Double): List[VisualClip] =
     timeline.videoTracks.flatMap: track =>
       track.clips.filter(_.containsTime(timestamp))
 
