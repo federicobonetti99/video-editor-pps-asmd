@@ -30,7 +30,6 @@ private case class ControllerState(
 
 class TimelineController:
 
-  // Inizializzazione pulita tramite factory del Model
   private val state = new AtomicReference[ControllerState](
     ControllerState(
       history = History(current = Timeline.default)
@@ -51,6 +50,7 @@ class TimelineController:
     onClipSelected = _ => (),
     onClipMoved = (clip, targetTrackId, newTime) => handleClipMoved(clip, targetTrackId, newTime),
     onEffectSelected = effect => handleEffectApplied(effect),
+    onAudioVolumeChanged = volume => handleAudioVolumeChanged(volume),
     onAddVideoTrackRequested = () => handleAddVideoTrack(),
     onAddAudioTrackRequested = () => handleAddAudioTrack()
   )
@@ -230,7 +230,6 @@ class TimelineController:
       case ImportedMedia.Audio(file, duration) =>
         val current = state.get()
         val fileUrl = file.toURI.toString
-        // Target: seconda traccia audio (A2), fallback sulla prima (A1) o 1
         val targetAudioTrackId = current.timeline.audioTracks.lift(1).orElse(current.timeline.audioTracks.headOption).map(_.id).getOrElse(1)
 
         val importedClip = AudioClip(
@@ -358,6 +357,19 @@ class TimelineController:
             view.selectClip(Some(SelectedClip.SelectedVideo(trackId, updatedClip)))
             updateTimelineState(updatedTimeline)
         }
+      case _ => ()
+
+  private def handleAudioVolumeChanged(volume: Double): Unit =
+    val current = state.get()
+    view.getSelectedClip match
+      case Some(SelectedClip.SelectedAudio(trackId, selAudio)) =>
+        findAudioTrack(trackId).foreach: track =>
+          val idx = track.clips.indexWhere(_.isSameAs(selAudio))
+          if idx != -1 then
+            val updatedTimeline = TimelineEngine.applyVolumeToAudioClip(current.timeline, trackId, idx, volume)
+            val updatedClip = track.clips(idx).copy(volume = volume)
+            view.selectClip(Some(SelectedClip.SelectedAudio(trackId, updatedClip)))
+            updateTimelineState(updatedTimeline)
       case _ => ()
 
   private def calculateTimelineAfterDelete(): Timeline =

@@ -24,6 +24,7 @@ class TimelineView(
                     val onClipSelected: Option[SelectedClip] => Unit = _ => (),
                     val onClipMoved: (MediaClip, Int, Double) => Unit = (_, _, _) => (),
                     val onEffectSelected: VideoEffect => Unit = _ => (),
+                    val onAudioVolumeChanged: Double => Unit = _ => (),
                     val onAddVideoTrackRequested: () => Unit = () => (),
                     val onAddAudioTrackRequested: () => Unit = () => ()
                   ) extends VBox:
@@ -67,7 +68,10 @@ class TimelineView(
     maxHeight = 270.0
     style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 0 0 0 1px;"
 
-  private val effectInspector = new EffectInspectorPane(effect => onEffectSelected(effect))
+  private val effectInspector = new EffectInspectorPane(
+    onEffectChanged = effect => onEffectSelected(effect),
+    onAudioVolumeChanged = volume => onAudioVolumeChanged(volume)
+  )
 
   private val rightMask = new StackPane:
     hgrow = Priority.Always

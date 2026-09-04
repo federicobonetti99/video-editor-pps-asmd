@@ -4,9 +4,12 @@ import scalafx.Includes.*
 import scalafx.scene.layout.{HBox, VBox}
 import scalafx.scene.control.{Label, TextField}
 import scalafx.geometry.{Insets, Pos}
-import core.model.{MediaClip, VideoClip, VideoEffect}
+import core.model.{AudioClip, MediaClip, VideoClip, VideoEffect}
 
-class EffectInspectorPane(onEffectChanged: VideoEffect => Unit) extends VBox:
+class EffectInspectorPane(
+                           onEffectChanged: VideoEffect => Unit,
+                           onAudioVolumeChanged: Double => Unit = _ => ()
+                         ) extends VBox:
   spacing = 4
   padding = Insets(2)
   alignment = Pos.TopLeft
@@ -25,8 +28,17 @@ class EffectInspectorPane(onEffectChanged: VideoEffect => Unit) extends VBox:
       case Some(videoClip: VideoClip) =>
         renderControlsFor(videoClip.effect, videoClip.timing.duration)
 
+      case Some(audioClip: AudioClip) =>
+        renderAudioControls(audioClip.volume)
+
       case Some(_) =>
         ()
+
+  private def renderAudioControls(currentVolume: Double): Unit =
+    val rowVol = createNumberInput("Vol:", currentVolume, min = 0.0, max = 2.0) { newVal =>
+      onAudioVolumeChanged(newVal)
+    }
+    children.add(rowVol)
 
   private def renderControlsFor(effect: VideoEffect, maxDuration: Double): Unit =
     effect match
