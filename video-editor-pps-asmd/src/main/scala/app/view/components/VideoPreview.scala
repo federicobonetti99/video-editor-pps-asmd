@@ -6,6 +6,7 @@ import javafx.scene.effect.{ColorAdjust, SepiaTone}
 import scalafx.Includes.*
 import scalafx.application.Platform
 import scalafx.geometry.Pos
+import scalafx.scene.image.{Image, ImageView}
 import scalafx.scene.layout.StackPane
 import scalafx.scene.media.MediaView
 
@@ -34,125 +35,170 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
     fitHeight = height
     preserveRatio = true
 
-  children = Seq(mediaView)
+  private val imageView = new ImageView():
+    fitWidth = width
+    fitHeight = height
+    preserveRatio = true
+    visible = false
+
+  children = Seq(mediaView, imageView)
 
   private val activeJfxPlayer = new AtomicReference[Option[javafx.scene.media.MediaPlayer]](None)
   private val currentLoadedUrl = new AtomicReference[Option[String]](None)
   private val isSeekingOrLoading = new AtomicBoolean(false)
 
+  private val imageExtensions = Set("png", "jpg", "jpeg", "bmp", "gif", "webp")
+
+  private def isImageUrl(url: String): Boolean =
+    val cleanUrl = url.toLowerCase.takeWhile(_ != '?')
+    imageExtensions.exists(ext => cleanUrl.endsWith(s".$ext"))
+
   def update(state: PlaybackState, onTimeUpdated: Double => Unit): Unit =
     Platform.runLater:
       state.mediaUrl match
         case Some(url) =>
-          applyVisualEffects(state.effect, state.relativeTime, state.clipDuration)
-          val targetDuration = javafx.util.Duration.seconds(state.relativeTime)
+          val isImage = isImageUrl(url)
+          val activeNode: scalafx.scene.Node = if isImage then imageView else mediaView
 
-          if !currentLoadedUrl.get().contains(url) then
-            isSeekingOrLoading.set(true)
+          applyVisualEffects(activeNode, state.effect, state.relativeTime, state.clipDuration)
 
-            activeJfxPlayer.get().foreach: p =>
-              p.setOnEndOfMedia(null)
-              p.stop()
-              p.dispose()
-            activeJfxPlayer.set(None)
-            jfxMediaView.setMediaPlayer(null)
-            currentLoadedUrl.set(Some(url))
-
-            try
-              val jfxMedia = new javafx.scene.media.Media(url)
-              val jfxPlayer = new javafx.scene.media.MediaPlayer(jfxMedia)
-
-              jfxPlayer.setMute(true)
-              jfxPlayer.setVolume(0.0)
-
-              jfxMediaView.setMediaPlayer(jfxPlayer)
-              activeJfxPlayer.set(Some(jfxPlayer))
-
-              jfxPlayer.currentTimeProperty().addListener: (_, _, newTime) =>
-                if !isSeekingOrLoading.get() && jfxPlayer.getStatus == javafx.scene.media.MediaPlayer.Status.PLAYING then
-                  onTimeUpdated(newTime.toSeconds)
-
-              jfxPlayer.setOnReady: () =>
-                jfxPlayer.seek(targetDuration)
-                Platform.runLater:
-                  isSeekingOrLoading.set(false)
-                  if state.isPlaying then jfxPlayer.play()
-                  else jfxPlayer.pause()
-
-              jfxPlayer.setOnEndOfMedia: () =>
-                val duration = jfxMedia.getDuration
-                if duration != null && !duration.isUnknown then
-                  onTimeUpdated(duration.toSeconds)
-            catch
-              case _: Exception =>
-                isSeekingOrLoading.set(false)
-
+          if isImage then
+            renderImage(url)
           else
-            activeJfxPlayer.get().foreach: player =>
-              if !isSeekingOrLoading.get() then
-                val status = player.getStatus
-                val currentSec = player.getCurrentTime.toSeconds
-                val diff = Math.abs(currentSec - state.relativeTime)
-
-                if state.isPlaying then
-                  if status != javafx.scene.media.MediaPlayer.Status.PLAYING then
-                    if diff > 0.1 then player.seek(targetDuration)
-                    player.play()
-                  else if diff > 0.4 then
-                    player.seek(targetDuration)
-                else
-                  if status == javafx.scene.media.MediaPlayer.Status.PLAYING then
-                    player.pause()
-                  if diff > 0.03 then
-                    player.seek(targetDuration)
+            renderVideo(url, state, onTimeUpdated)
 
         case None =>
-          resetVisualEffects()
-          isSeekingOrLoading.set(false)
-          activeJfxPlayer.get().foreach: p =>
-            p.stop()
-            p.dispose()
-          activeJfxPlayer.set(None)
-          currentLoadedUrl.set(None)
-          jfxMediaView.setMediaPlayer(null)
+          clearPreview()
 
-  private def applyVisualEffects(effect: VideoEffect, relativeTime: Double, duration: Double): Unit =
+  private def renderImage(url: String): Unit =
+    stopAndDisposeVideoPlayer()
+    mediaView.visible = false
+    imageView.visible = true
+
+    if !currentLoadedUrl.get().contains(url) then
+      currentLoadedUrl.set(Some(url))
+      try
+        val img = new Image(url)
+        imageView.image = img
+      catch
+        case _: Exception =>
+          imageView.image = null
+
+  private def renderVideo(url: String, state: PlaybackState, onTimeUpdated: Double => Unit): Unit =
+    imageView.visible = false
+    imageView.image = null
+    mediaView.visible = true
+
+    val targetDuration = javafx.util.Duration.seconds(state.relativeTime)
+
+    if !currentLoadedUrl.get().contains(url) then
+      isSeekingOrLoading.set(true)
+      stopAndDisposeVideoPlayer()
+      currentLoadedUrl.set(Some(url))
+
+      try
+        val jfxMedia = new javafx.scene.media.Media(url)
+        val jfxPlayer = new javafx.scene.media.MediaPlayer(jfxMedia)
+
+        jfxPlayer.setMute(true)
+        jfxPlayer.setVolume(0.0)
+
+        jfxMediaView.setMediaPlayer(jfxPlayer)
+        activeJfxPlayer.set(Some(jfxPlayer))
+
+        jfxPlayer.currentTimeProperty().addListener: (_, _, newTime) =>
+          if !isSeekingOrLoading.get() && jfxPlayer.getStatus == javafx.scene.media.MediaPlayer.Status.PLAYING then
+            onTimeUpdated(newTime.toSeconds)
+
+        jfxPlayer.setOnReady: () =>
+          jfxPlayer.seek(targetDuration)
+          Platform.runLater:
+            isSeekingOrLoading.set(false)
+            if state.isPlaying then jfxPlayer.play()
+            else jfxPlayer.pause()
+
+        jfxPlayer.setOnEndOfMedia: () =>
+          val duration = jfxMedia.getDuration
+          if duration != null && !duration.isUnknown then
+            onTimeUpdated(duration.toSeconds)
+      catch
+        case _: Exception =>
+          isSeekingOrLoading.set(false)
+
+    else
+      activeJfxPlayer.get().foreach: player =>
+        if !isSeekingOrLoading.get() then
+          val status = player.getStatus
+          val currentSec = player.getCurrentTime.toSeconds
+          val diff = Math.abs(currentSec - state.relativeTime)
+
+          if state.isPlaying then
+            if status != javafx.scene.media.MediaPlayer.Status.PLAYING then
+              if diff > 0.1 then player.seek(targetDuration)
+              player.play()
+            else if diff > 0.4 then
+              player.seek(targetDuration)
+          else
+            if status == javafx.scene.media.MediaPlayer.Status.PLAYING then
+              player.pause()
+            if diff > 0.03 then
+              player.seek(targetDuration)
+
+  private def stopAndDisposeVideoPlayer(): Unit =
+    activeJfxPlayer.get().foreach: p =>
+      p.setOnEndOfMedia(null)
+      p.stop()
+      p.dispose()
+    activeJfxPlayer.set(None)
+    jfxMediaView.setMediaPlayer(null)
+
+  private def clearPreview(): Unit =
+    resetVisualEffects(mediaView)
+    resetVisualEffects(imageView)
+    isSeekingOrLoading.set(false)
+    stopAndDisposeVideoPlayer()
+    currentLoadedUrl.set(None)
+    imageView.image = null
+    imageView.visible = false
+    mediaView.visible = false
+
+  private def applyVisualEffects(node: scalafx.scene.Node, effect: VideoEffect, relativeTime: Double, duration: Double): Unit =
     val transform = EffectCalculator.computeTransform(effect, relativeTime, duration)
-    jfxMediaView.setScaleX(transform.scale)
-    jfxMediaView.setScaleY(transform.scale)
-    jfxMediaView.setTranslateX(transform.translateX)
-    jfxMediaView.setTranslateY(transform.translateY)
-    jfxMediaView.setOpacity(transform.opacity)
+    node.scaleX = transform.scale
+    node.scaleY = transform.scale
+    node.translateX = transform.translateX
+    node.translateY = transform.translateY
+    node.opacity = transform.opacity
 
     effect match
       case VideoEffect.Grayscale =>
         val ca = new ColorAdjust()
         ca.setSaturation(-1.0)
-        jfxMediaView.setEffect(ca)
+        node.effect = ca
 
       case VideoEffect.Sepia =>
         val sepia = new SepiaTone()
         sepia.setLevel(0.8)
-        jfxMediaView.setEffect(sepia)
+        node.effect = sepia
 
       case VideoEffect.Brightness(level) =>
         val ca = new ColorAdjust()
         ca.setBrightness(level)
-        jfxMediaView.setEffect(ca)
+        node.effect = ca
 
       case VideoEffect.Invert =>
         val ca = new ColorAdjust()
         ca.setHue(1.0)
         ca.setContrast(-1.0)
-        jfxMediaView.setEffect(ca)
+        node.effect = ca
 
       case _ =>
-        jfxMediaView.setEffect(null)
+        node.effect = null
 
-  private def resetVisualEffects(): Unit =
-    jfxMediaView.setScaleX(1.0)
-    jfxMediaView.setScaleY(1.0)
-    jfxMediaView.setTranslateX(0.0)
-    jfxMediaView.setTranslateY(0.0)
-    jfxMediaView.setOpacity(1.0)
-    jfxMediaView.setEffect(null)
+  private def resetVisualEffects(node: scalafx.scene.Node): Unit =
+    node.scaleX = 1.0
+    node.scaleY = 1.0
+    node.translateX = 0.0
+    node.translateY = 0.0
+    node.opacity = 1.0
+    node.effect = null
