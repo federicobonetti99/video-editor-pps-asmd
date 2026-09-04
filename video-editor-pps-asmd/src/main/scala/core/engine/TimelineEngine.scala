@@ -65,6 +65,21 @@ object TimelineEngine:
         track.copy(clips = updatedClips)
       else track
 
+  def applyVolumeToAudioClip(
+                              timeline: Timeline,
+                              trackId: Int,
+                              clipIndex: Int,
+                              volume: Double
+                            ): Timeline =
+    modifyAudioTrack(timeline, trackId): track =>
+      if track.clips.isDefinedAt(clipIndex) then
+        val updatedClips = track.clips.updated(
+          clipIndex,
+          track.clips(clipIndex).copy(volume = volume)
+        )
+        track.copy(clips = updatedClips)
+      else track
+
   def moveClip[C <: MediaClip](timeline: Timeline, target: C, newStartTime: Double): Timeline =
     val safeStartTime = Math.max(0.0, newStartTime)
     val targetEndTime = safeStartTime + target.duration

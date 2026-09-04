@@ -47,6 +47,7 @@ case class AudioClip(
                       sourceUrl: String,
                       sourceLength: Double,
                       timing: ClipTiming,
+                      volume: Double = 1.0,
                       volumePoints: List[VolumePoint] = List.empty
                     ) extends MediaClip
 
@@ -57,9 +58,20 @@ object AudioClip:
              startTime: Double,
              trimStart: Double,
              duration: Double,
+             volume: Double,
              volumePoints: List[VolumePoint]
            ): AudioClip =
-    AudioClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), volumePoints)
+    AudioClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), volume, volumePoints)
+
+  def apply(
+             sourceUrl: String,
+             sourceLength: Double,
+             startTime: Double,
+             trimStart: Double,
+             duration: Double,
+             volumePoints: List[VolumePoint]
+           ): AudioClip =
+    AudioClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), 1.0, volumePoints)
 
   def apply(
              sourceUrl: String,
@@ -68,7 +80,7 @@ object AudioClip:
              trimStart: Double,
              duration: Double
            ): AudioClip =
-    AudioClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), List.empty)
+    AudioClip(sourceUrl, sourceLength, ClipTiming(startTime, trimStart, duration), 1.0, List.empty)
 
 sealed trait Track[+C <: MediaClip]:
   def id: Int

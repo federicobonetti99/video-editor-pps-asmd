@@ -370,14 +370,66 @@ class TimelineEngineTest extends AnyFunSuite with Matchers:
 
   test("moveClipToTrack should reject move if destination track has an overlapping clip") {
     val obstacleClip = VideoClip("obs.mp4", startTime = 10.0, trimStart = 0.0, duration = 5.0, sourceLength = 10.0, effect = VideoEffect.None)
-    val track1 = VideoTrack(1, List(sampleClip)) // 0.0 to 10.0
-    val track2 = VideoTrack(2, List(obstacleClip)) // 10.0 to 15.0
+    val track1 = VideoTrack(1, List(sampleClip))
+    val track2 = VideoTrack(2, List(obstacleClip))
     val timeline = Timeline(videoTracks = List(track1, track2), audioTracks = Nil)
 
-    // Try moving sampleClip to track 2 at startTime 12.0 (overlaps obstacleClip 10.0-15.0)
     val updated = TimelineEngine.moveClipToTrack(timeline, target = sampleClip, targetTrackId = 2, newStartTime = 12.0)
 
-    // Track 1 should still have sampleClip and track 2 should still have obstacleClip untouched
     updated.videoTracks.find(_.id == 1).get.clips shouldBe List(sampleClip)
     updated.videoTracks.find(_.id == 2).get.clips shouldBe List(obstacleClip)
+  }
+
+  test("Update audio clip volume on a specific track and clip index") {
+    val initialAudioClip = AudioClip(
+      sourceUrl = "audio.mp3",
+      sourceLength = 10.0,
+      startTime = 2.0,
+      trimStart = 0.0,
+      duration = 5.0,
+      volume = 1.0,
+      volumePoints = Nil
+    )
+    val timeline = Timeline(
+      videoTracks = Nil,
+      audioTracks = List(AudioTrack(id = 1, clips = List(initialAudioClip)))
+    )
+
+    val updatedTimeline = TimelineEngine.applyVolumeToAudioClip(
+      timeline = timeline,
+      trackId = 1,
+      clipIndex = 0,
+      volume = 1.8
+    )
+
+    val updatedClips = updatedTimeline.audioTracks.head.clips
+    updatedClips should have size 1
+    updatedClips.head.volume shouldBe 1.8
+    updatedClips.head.startTime shouldBe 2.0
+    updatedClips.head.duration shouldBe 5.0
+  }
+
+  test("Return untouched timeline when applying volume with invalid clip index") {
+    val initialAudioClip = AudioClip(
+      sourceUrl = "audio.mp3",
+      sourceLength = 10.0,
+      startTime = 0.0,
+      trimStart = 0.0,
+      duration = 5.0,
+      volume = 1.0,
+      volumePoints = Nil
+    )
+    val timeline = Timeline(
+      videoTracks = Nil,
+      audioTracks = List(AudioTrack(id = 1, clips = List(initialAudioClip)))
+    )
+
+    val updatedTimeline = TimelineEngine.applyVolumeToAudioClip(
+      timeline = timeline,
+      trackId = 1,
+      clipIndex = 999,
+      volume = 2.0
+    )
+
+    updatedTimeline shouldBe timeline
   }
