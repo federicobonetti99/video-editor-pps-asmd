@@ -30,17 +30,10 @@ private case class ControllerState(
 
 class TimelineController:
 
-  private val initialVideoTrack = VideoTrack(id = 1, clips = Nil)
-  private val initialAudioTrack = AudioTrack(id = 1, clips = Nil)
-
-  private val initialTimeline = Timeline(
-    videoTracks = List(initialVideoTrack),
-    audioTracks = List(initialAudioTrack)
-  )
-
+  // Inizializzazione pulita tramite factory del Model
   private val state = new AtomicReference[ControllerState](
     ControllerState(
-      history = History(current = initialTimeline)
+      history = History(current = Timeline.default)
     )
   )
 
@@ -237,7 +230,8 @@ class TimelineController:
       case ImportedMedia.Audio(file, duration) =>
         val current = state.get()
         val fileUrl = file.toURI.toString
-        val targetAudioTrackId = current.timeline.audioTracks.headOption.map(_.id).getOrElse(1)
+        // Target: seconda traccia audio (A2), fallback sulla prima (A1) o 1
+        val targetAudioTrackId = current.timeline.audioTracks.lift(1).orElse(current.timeline.audioTracks.headOption).map(_.id).getOrElse(1)
 
         val importedClip = AudioClip(
           sourceUrl = fileUrl,

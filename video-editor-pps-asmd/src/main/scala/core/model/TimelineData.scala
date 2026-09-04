@@ -83,6 +83,15 @@ case class Timeline(
                      currentTime: Double = 0.0
                    )
 
+object Timeline:
+  def default: Timeline = Timeline(
+    videoTracks = List(VideoTrack(id = 1, clips = Nil)),
+    audioTracks = List(
+      AudioTrack(id = 1, clips = Nil),
+      AudioTrack(id = 2, clips = Nil)
+    )
+  )
+
 extension [C <: MediaClip](clip: C)
   def startTime: Double = clip.timing.startTime
   def duration: Double = clip.timing.duration
