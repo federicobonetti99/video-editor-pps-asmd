@@ -168,7 +168,8 @@ class TimelineController:
     val activeAudiosInfo = getActiveAudioClips().map: clip =>
       ActiveAudioTrackInfo(
         sourceUrl = clip.sourceUrl,
-        relativeTimeSeconds = clip.relativeTimeAt(current.currentTime)
+        relativeTimeSeconds = clip.relativeTimeAt(current.currentTime),
+        volume = clip.volume
       )
 
     view.updateAudio(activeAudiosInfo, isPlaying)

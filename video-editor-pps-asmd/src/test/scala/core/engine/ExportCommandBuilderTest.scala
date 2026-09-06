@@ -146,8 +146,45 @@ class ExportCommandBuilderTest extends AnyFunSuite:
     assert(filterIndex != -1)
   
     val filterString = command.arguments(filterIndex + 1)
-  
-    assert(filterString.contains("tpad=stop_mode=clone"), s"Filter string missing tpad clone: $filterString")
+
+    assert(filterString.contains("loop=-1:1:0"), s"Filter string missing image loop: $filterString")
+    assert(filterString.contains("trim=duration=4.000"), s"Filter string missing trim duration: $filterString")
     assert(filterString.contains(s"fps=${defaultSettings.fps}"), s"Filter string missing fps filter: $filterString")
     assert(filterString.contains("crop="), s"Filter string missing shake crop filter: $filterString")
+  }
+
+  test("ExportCommandBuilder generates correct volume and mixdown filter for AudioClip") {
+    val audioClip1 = AudioClip(
+      sourceUrl = "file:/audio1.mp3",
+      sourceLength = 10.0,
+      timing = ClipTiming(startTime = 0.0, trimStart = 0.0, duration = 5.0),
+      volume = 0.45
+    )
+    val audioClip2 = AudioClip(
+      sourceUrl = "file:/audio2.mp3",
+      sourceLength = 10.0,
+      timing = ClipTiming(startTime = 1.0, trimStart = 0.0, duration = 4.0),
+      volume = 1.50
+    )
+
+    val timeline = Timeline(
+      videoTracks = Nil,
+      audioTracks = List(
+        AudioTrack(id = 1, clips = List(audioClip1)),
+        AudioTrack(id = 2, clips = List(audioClip2))
+      )
+    )
+
+    val command = ExportCommandBuilder.buildCommand(timeline, defaultSettings)
+    val filterIndex = command.arguments.indexOf("-filter_complex")
+    assert(filterIndex != -1, "Command must contain -filter_complex")
+
+    val filterString = command.arguments(filterIndex + 1)
+
+    assert(filterString.contains("volume=0.450"), s"Missing volume filter for audioClip1: $filterString")
+    assert(filterString.contains("volume=1.500"), s"Missing volume filter for audioClip2: $filterString")
+    assert(
+      filterString.contains("amix=inputs=2:duration=longest:dropout_transition=0:normalize=0"),
+      s"Missing or incorrect amix configuration: $filterString"
+    )
   }

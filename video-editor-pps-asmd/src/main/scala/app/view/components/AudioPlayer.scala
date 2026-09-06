@@ -6,7 +6,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 case class ActiveAudioTrackInfo(
                                  sourceUrl: String,
-                                 relativeTimeSeconds: Double
+                                 relativeTimeSeconds: Double,
+                                 volume: Double = 1.0
                                )
 
 class AudioPlayer:
@@ -26,8 +27,10 @@ class AudioPlayer:
         case _: Throwable => ()
 
     val updatedMap = activeAudios.foldLeft(stillActiveMap): (acc, info) =>
+      val targetVolume = Math.max(0.0, Math.min(1.0, info.volume))
       acc.get(info.sourceUrl) match
         case Some(existingPlayer) =>
+          existingPlayer.volume = targetVolume
           if isPlaying then
             if existingPlayer.status.value != MediaPlayer.Status.Playing.delegate then
               existingPlayer.seek(Duration(info.relativeTimeSeconds * 1000.0))
@@ -45,6 +48,7 @@ class AudioPlayer:
           try
             val media = new Media(info.sourceUrl)
             val newPlayer = new MediaPlayer(media)
+            newPlayer.volume = targetVolume
             newPlayer.startTime = Duration.Zero
             newPlayer.seek(Duration(info.relativeTimeSeconds * 1000.0))
             if isPlaying then newPlayer.play() else newPlayer.pause()

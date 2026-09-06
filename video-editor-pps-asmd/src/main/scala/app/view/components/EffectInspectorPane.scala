@@ -76,28 +76,32 @@ class EffectInspectorPane(
       minWidth = 0.0
       prefWidth = 30.0
       style = "-fx-text-fill: #aaaaaa; -fx-font-size: 9px;"
-
+  
+    def formatVal(v: Double): String =
+      String.format(java.util.Locale.US, "%.2f", Double.box(v))
+  
     val field = new TextField:
-      text = f"$initial%.2f"
+      text = formatVal(initial)
       prefWidth = 36.0
       maxWidth = 40.0
       minWidth = 0.0
       style = "-fx-background-color: #2b2b2b; -fx-text-fill: #ffffff; -fx-font-size: 9px; -fx-padding: 1 2 1 2; -fx-background-radius: 2;"
-
+  
     def validateAndCommit(): Unit =
-      field.text.value.toDoubleOption match
+      val cleanText = field.text.value.trim.replace(',', '.')
+      cleanText.toDoubleOption match
         case Some(v) =>
           val clamped = Math.max(min, Math.min(max, v))
-          field.text = f"$clamped%.2f"
+          field.text = formatVal(clamped)
           onCommit(clamped)
         case None =>
-          field.text = f"$initial%.2f"
-
+          field.text = formatVal(initial)
+  
     field.onAction = _ => validateAndCommit()
     field.focused.onChange { (_, _, focused) =>
       if !focused then validateAndCommit()
     }
-
+  
     new HBox(2):
       alignment = Pos.CenterLeft
       minWidth = 0.0

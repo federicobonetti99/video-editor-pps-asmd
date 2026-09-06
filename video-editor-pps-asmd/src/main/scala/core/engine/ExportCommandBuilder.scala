@@ -76,8 +76,9 @@ object ExportCommandBuilder:
       val clipChain = clip match
         case _: ImageClip =>
           Seq(
-            Some(s"tpad=stop_mode=clone:stop_duration=${fmt(clip.duration)}"),
+            Some("loop=-1:1:0"),
             Some(s"fps=${settings.fps}"),
+            Some(s"trim=duration=${fmt(clip.duration)}"),
             Some("setpts=PTS-STARTPTS"),
             formatEffect(clip.effect, clip.duration),
             Some(scaleFilter),
@@ -117,9 +118,10 @@ object ExportCommandBuilder:
       val fileIdx = fileIndexMap(extractFilePath(clip.sourceUrl))
       val delayMs = (clip.startTime * 1000).toLong
       val trimFilter = s"atrim=start=${fmt(clip.trimStart)}:duration=${fmt(clip.duration)},asetpts=PTS-STARTPTS"
+      val volumeFilter = s",volume=${fmt(clip.volume)}"
       val delayFilter = if delayMs > 0 then s",adelay=$delayMs|$delayMs" else ""
 
-      s"[$fileIdx:a]$trimFilter$delayFilter[a$idx]"
+      s"[$fileIdx:a]$trimFilter$volumeFilter$delayFilter[a$idx]"
     }
 
     val (audioFilters, finalAudioOut) =
@@ -129,7 +131,7 @@ object ExportCommandBuilder:
         (audioFilterParts, "[a0]")
       else
         val inputsMerged = (0 until audioClipsWithTrack.size).map(i => s"[a$i]").mkString
-        val mixFilter = s"${inputsMerged}amix=inputs=${audioClipsWithTrack.size}:duration=longest:dropout_transition=0[aout]"
+        val mixFilter = s"${inputsMerged}amix=inputs=${audioClipsWithTrack.size}:duration=longest:dropout_transition=0:normalize=0[aout]"
         (audioFilterParts :+ mixFilter, "[aout]")
 
     val allFilterChains = (videoFilters ++ audioFilters).mkString(";")
