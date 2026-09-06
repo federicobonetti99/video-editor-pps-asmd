@@ -73,14 +73,27 @@ object ExportCommandBuilder:
       val fileIdx = fileIndexMap(extractFilePath(clip.sourceUrl))
       val scaleFilter = s"scale=${settings.width}:${settings.height}:force_original_aspect_ratio=decrease,pad=${settings.width}:${settings.height}:(ow-iw)/2:(oh-ih)/2"
 
-      val clipChain = Seq(
-        Some(s"trim=start=${fmt(clip.trimStart)}:duration=${fmt(clip.duration)}"),
-        Some("setpts=PTS-STARTPTS"),
-        formatEffect(clip.effect, clip.duration),
-        Some(scaleFilter),
-        Some(s"setpts=PTS-STARTPTS+${fmt(clip.startTime)}/TB"),
-        Some("setsar=1")
-      ).flatten.mkString(",")
+      val clipChain = clip match
+        case _: ImageClip =>
+          Seq(
+            Some(s"tpad=stop_mode=clone:stop_duration=${fmt(clip.duration)}"),
+            Some(s"fps=${settings.fps}"),
+            Some("setpts=PTS-STARTPTS"),
+            formatEffect(clip.effect, clip.duration),
+            Some(scaleFilter),
+            Some(s"setpts=PTS-STARTPTS+${fmt(clip.startTime)}/TB"),
+            Some("setsar=1")
+          ).flatten.mkString(",")
+
+        case _: VideoClip =>
+          Seq(
+            Some(s"trim=start=${fmt(clip.trimStart)}:duration=${fmt(clip.duration)}"),
+            Some("setpts=PTS-STARTPTS"),
+            formatEffect(clip.effect, clip.duration),
+            Some(scaleFilter),
+            Some(s"setpts=PTS-STARTPTS+${fmt(clip.startTime)}/TB"),
+            Some("setsar=1")
+          ).flatten.mkString(",")
 
       s"[$fileIdx:v]$clipChain[v$idx]"
     }

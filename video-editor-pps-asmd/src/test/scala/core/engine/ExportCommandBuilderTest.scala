@@ -131,3 +131,23 @@ class ExportCommandBuilderTest extends AnyFunSuite:
     assert(filterString.contains("d=1.250"))
     assert(!filterString.contains("1,250"))
   }
+
+  test("ExportCommandBuilder generates cloned stream and fps for ImageClip to enable dynamic effects like Shake") {
+    val imageClip = ImageClip.create(
+      sourceUrl = "file:/image.png",
+      startTime = 0.0,
+      duration = 4.0,
+      effect = VideoEffect.Shake(intensity = 10.0, freq = 2.0)
+    )
+    val timeline = Timeline(videoTracks = List(VideoTrack(id = 1, clips = List(imageClip))), audioTracks = Nil)
+  
+    val command = ExportCommandBuilder.buildCommand(timeline, defaultSettings)
+    val filterIndex = command.arguments.indexOf("-filter_complex")
+    assert(filterIndex != -1)
+  
+    val filterString = command.arguments(filterIndex + 1)
+  
+    assert(filterString.contains("tpad=stop_mode=clone"), s"Filter string missing tpad clone: $filterString")
+    assert(filterString.contains(s"fps=${defaultSettings.fps}"), s"Filter string missing fps filter: $filterString")
+    assert(filterString.contains("crop="), s"Filter string missing shake crop filter: $filterString")
+  }
