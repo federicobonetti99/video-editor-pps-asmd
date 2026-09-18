@@ -24,4 +24,5 @@ jobs:
           apps: sbt
 
       - name: Run tests
+        working-directory: ./video-editor-pps-asmd
         run: sbt test
