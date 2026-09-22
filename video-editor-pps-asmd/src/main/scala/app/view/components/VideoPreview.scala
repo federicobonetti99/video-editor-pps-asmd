@@ -2,7 +2,8 @@ package app.view.components
 
 import core.engine.EffectCalculator
 import core.model.VideoEffect
-import javafx.scene.effect.{ColorAdjust, SepiaTone}
+import javafx.scene.effect.{Blend, BlendMode, ColorAdjust, ColorInput, SepiaTone}
+import javafx.scene.paint.Color
 import scalafx.Includes.*
 import scalafx.application.Platform
 import scalafx.geometry.Pos
@@ -42,6 +43,13 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
     visible = false
 
   children = Seq(mediaView, imageView)
+
+  private val cachedInvertEffect: Blend =
+    val whiteInput = new ColorInput(0, 0, width, height, Color.WHITE)
+    val blend = new Blend()
+    blend.setMode(BlendMode.DIFFERENCE)
+    blend.setTopInput(whiteInput)
+    blend
 
   private val activeJfxPlayer = new AtomicReference[Option[javafx.scene.media.MediaPlayer]](None)
   private val currentLoadedUrl = new AtomicReference[Option[String]](None)
@@ -187,10 +195,7 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
         node.effect = ca
 
       case VideoEffect.Invert =>
-        val ca = new ColorAdjust()
-        ca.setHue(1.0)
-        ca.setContrast(-1.0)
-        node.effect = ca
+        node.effect = cachedInvertEffect
 
       case _ =>
         node.effect = null
