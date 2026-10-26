@@ -4,13 +4,15 @@ import core.engine.EffectCalculator
 import core.model.VideoEffect
 import javafx.scene.effect.{Blend, BlendMode, ColorAdjust, ColorInput, SepiaTone}
 import javafx.scene.paint.Color
+import org.bytedeco.javacv.{FFmpegFrameGrabber, JavaFXFrameConverter}
 import scalafx.Includes.*
+import scalafx.animation.AnimationTimer
 import scalafx.application.Platform
 import scalafx.geometry.Pos
 import scalafx.scene.image.{Image, ImageView}
 import scalafx.scene.layout.StackPane
-import scalafx.scene.media.MediaView
 
+import java.net.URI
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 case class PlaybackState(
@@ -30,19 +32,13 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
   maxHeight = height
   style = "-fx-background-color: black; -fx-border-color: #333333; -fx-border-width: 2px;"
 
-  private val jfxMediaView = new javafx.scene.media.MediaView()
-  private val mediaView = new MediaView(jfxMediaView):
-    fitWidth = width
-    fitHeight = height
-    preserveRatio = true
-
   private val imageView = new ImageView():
     fitWidth = width
     fitHeight = height
     preserveRatio = true
-    visible = false
+    visible = true
 
-  children = Seq(mediaView, imageView)
+  children = Seq(imageView)
 
   private val cachedInvertEffect: Blend =
     val whiteInput = new ColorInput(0, 0, width, height, Color.WHITE)
@@ -51,9 +47,15 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
     blend.setTopInput(whiteInput)
     blend
 
-  private val activeJfxPlayer = new AtomicReference[Option[javafx.scene.media.MediaPlayer]](None)
+  private val currentGrabber = new AtomicReference[Option[FFmpegFrameGrabber]](None)
   private val currentLoadedUrl = new AtomicReference[Option[String]](None)
-  private val isSeekingOrLoading = new AtomicBoolean(false)
+  private val converter = new JavaFXFrameConverter()
+
+  private val lastRenderedSecond = new AtomicReference[Double](-1.0)
+  private val lastFrameNanos = new AtomicReference[Long](0L)
+  private val playbackLoop = new AtomicReference[Option[AnimationTimer]](None)
+  private val wasPlaying = new AtomicBoolean(false)
+  private val currentPlaybackTime = new AtomicReference[Double](0.0)
 
   private val imageExtensions = Set("png", "jpg", "jpeg", "bmp", "gif", "webp")
 
@@ -61,14 +63,26 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
     val cleanUrl = url.toLowerCase.takeWhile(_ != '?')
     imageExtensions.exists(ext => cleanUrl.endsWith(s".$ext"))
 
+  private def extractFilePath(url: String): String =
+    try
+      val uri = new URI(url)
+      if uri.getScheme == "file" then
+        val path = uri.getPath
+        if path.startsWith("/") && path.length > 2 && path.charAt(2) == ':' then
+          path.substring(1)
+        else
+          path
+      else
+        url
+    catch
+      case _: Exception => url
+
   def update(state: PlaybackState, onTimeUpdated: Double => Unit): Unit =
     Platform.runLater:
       state.mediaUrl match
         case Some(url) =>
           val isImage = isImageUrl(url)
-          val activeNode: scalafx.scene.Node = if isImage then imageView else mediaView
-
-          applyVisualEffects(activeNode, state.effect, state.relativeTime, state.clipDuration)
+          applyVisualEffects(imageView, state.effect, state.relativeTime, state.clipDuration)
 
           if isImage then
             renderImage(url)
@@ -79,96 +93,104 @@ class VideoPreview(width: Double, height: Double) extends StackPane:
           clearPreview()
 
   private def renderImage(url: String): Unit =
-    stopAndDisposeVideoPlayer()
-    mediaView.visible = false
-    imageView.visible = true
+    stopPlaybackLoop()
+    disposeGrabber()
 
     if !currentLoadedUrl.get().contains(url) then
       currentLoadedUrl.set(Some(url))
       try
-        val img = new Image(url)
-        imageView.image = img
+        imageView.image = new Image(url)
       catch
         case _: Exception =>
           imageView.image = null
 
   private def renderVideo(url: String, state: PlaybackState, onTimeUpdated: Double => Unit): Unit =
-    imageView.visible = false
-    imageView.image = null
-    mediaView.visible = true
-
-    val targetDuration = javafx.util.Duration.seconds(state.relativeTime)
-
     if !currentLoadedUrl.get().contains(url) then
-      isSeekingOrLoading.set(true)
-      stopAndDisposeVideoPlayer()
+      disposeGrabber()
       currentLoadedUrl.set(Some(url))
+      lastRenderedSecond.set(-1.0)
+      wasPlaying.set(false)
 
       try
-        val jfxMedia = new javafx.scene.media.Media(url)
-        val jfxPlayer = new javafx.scene.media.MediaPlayer(jfxMedia)
-
-        jfxPlayer.setMute(true)
-        jfxPlayer.setVolume(0.0)
-
-        jfxMediaView.setMediaPlayer(jfxPlayer)
-        activeJfxPlayer.set(Some(jfxPlayer))
-
-        jfxPlayer.currentTimeProperty().addListener: (_, _, newTime) =>
-          if !isSeekingOrLoading.get() && jfxPlayer.getStatus == javafx.scene.media.MediaPlayer.Status.PLAYING then
-            onTimeUpdated(newTime.toSeconds)
-
-        jfxPlayer.setOnReady: () =>
-          jfxPlayer.seek(targetDuration)
-          Platform.runLater:
-            isSeekingOrLoading.set(false)
-            if state.isPlaying then jfxPlayer.play()
-            else jfxPlayer.pause()
-
-        jfxPlayer.setOnEndOfMedia: () =>
-          val duration = jfxMedia.getDuration
-          if duration != null && !duration.isUnknown then
-            onTimeUpdated(duration.toSeconds)
+        val localPath = extractFilePath(url)
+        val grabber = new FFmpegFrameGrabber(localPath)
+        grabber.start()
+        currentGrabber.set(Some(grabber))
       catch
         case _: Exception =>
-          isSeekingOrLoading.set(false)
+          currentGrabber.set(None)
 
-    else
-      activeJfxPlayer.get().foreach: player =>
-        if !isSeekingOrLoading.get() then
-          val status = player.getStatus
-          val currentSec = player.getCurrentTime.toSeconds
-          val diff = Math.abs(currentSec - state.relativeTime)
+    currentGrabber.get().foreach: grabber =>
+      if state.isPlaying then
+        if !wasPlaying.get() || Math.abs(lastRenderedSecond.get() - state.relativeTime) > 0.25 then
+          seekFrame(grabber, state.relativeTime)
 
-          if state.isPlaying then
-            if status != javafx.scene.media.MediaPlayer.Status.PLAYING then
-              if diff > 0.1 then player.seek(targetDuration)
-              player.play()
-            else if diff > 0.4 then
-              player.seek(targetDuration)
-          else
-            if status == javafx.scene.media.MediaPlayer.Status.PLAYING then
-              player.pause()
-            if diff > 0.03 then
-              player.seek(targetDuration)
+        wasPlaying.set(true)
 
-  private def stopAndDisposeVideoPlayer(): Unit =
-    activeJfxPlayer.get().foreach: p =>
-      p.setOnEndOfMedia(null)
-      p.stop()
-      p.dispose()
-    activeJfxPlayer.set(None)
-    jfxMediaView.setMediaPlayer(null)
+        if playbackLoop.get().isEmpty then
+          currentPlaybackTime.set(state.relativeTime)
+          lastFrameNanos.set(System.nanoTime())
+
+          val loop = AnimationTimer { now =>
+            val previousNanos = lastFrameNanos.getAndSet(now)
+            val delta = (now - previousNanos) / 1e9
+            val newTime = currentPlaybackTime.updateAndGet(t => t + delta)
+
+            if state.clipDuration > 0 && newTime >= state.clipDuration then
+              currentPlaybackTime.set(state.clipDuration)
+              onTimeUpdated(state.clipDuration)
+              stopPlaybackLoop()
+            else
+              onTimeUpdated(newTime)
+              val targetMicros = (newTime * 1000000.0).toLong
+              if grabber.getTimestamp < targetMicros then
+                val frame = grabber.grabImage()
+                if frame != null then
+                  val fxImg = converter.convert(frame)
+                  if fxImg != null then
+                    imageView.image = fxImg
+                    lastRenderedSecond.set(newTime)
+          }
+          playbackLoop.set(Some(loop))
+          loop.start()
+      else
+        wasPlaying.set(false)
+        stopPlaybackLoop()
+        if Math.abs(lastRenderedSecond.get() - state.relativeTime) > 0.03 then
+          seekFrame(grabber, state.relativeTime)
+
+  private def seekFrame(grabber: FFmpegFrameGrabber, seconds: Double): Unit =
+    try
+      val targetMicros = (Math.max(0.0, seconds) * 1000000.0).toLong
+      grabber.setTimestamp(targetMicros)
+      val frame = grabber.grabImage()
+      if frame != null then
+        val fxImage = converter.convert(frame)
+        if fxImage != null then
+          imageView.image = fxImage
+          lastRenderedSecond.set(seconds)
+    catch
+      case _: Exception => ()
+
+  private def stopPlaybackLoop(): Unit =
+    playbackLoop.getAndSet(None).foreach(_.stop())
+
+  private def disposeGrabber(): Unit =
+    currentGrabber.get().foreach: g =>
+      try
+        g.stop()
+        g.release()
+      catch
+        case _: Exception => ()
+    currentGrabber.set(None)
+    currentLoadedUrl.set(None)
 
   private def clearPreview(): Unit =
-    resetVisualEffects(mediaView)
+    stopPlaybackLoop()
+    disposeGrabber()
     resetVisualEffects(imageView)
-    isSeekingOrLoading.set(false)
-    stopAndDisposeVideoPlayer()
-    currentLoadedUrl.set(None)
     imageView.image = null
-    imageView.visible = false
-    mediaView.visible = false
+    wasPlaying.set(false)
 
   private def applyVisualEffects(node: scalafx.scene.Node, effect: VideoEffect, relativeTime: Double, duration: Double): Unit =
     val transform = EffectCalculator.computeTransform(effect, relativeTime, duration)

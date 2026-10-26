@@ -9,8 +9,9 @@ lazy val root = (project in file("."))
   .settings(
     name := "video-editor-pps-asmd",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.19" % Test,
-      "org.scalafx"   %% "scalafx"   % "22.0.0-R33"
+      "org.scalatest" %% "scalatest"       % "3.2.19" % Test,
+      "org.scalafx"   %% "scalafx"         % "22.0.0-R33",
+      "org.bytedeco"  %  "javacv-platform" % "1.5.10"
     ),
     fork := true
   )
