@@ -2,18 +2,11 @@ package app.controller
 
 import app.utils.{ImportedMedia, MediaImporter}
 import scalafx.Includes.*
-import scalafx.application.Platform
-import scalafx.geometry.{Insets, Pos}
-import scalafx.scene.Scene
-import scalafx.scene.control.{Alert, Label, ProgressBar}
-import scalafx.scene.control.Alert.AlertType
-import scalafx.scene.layout.VBox
-import scalafx.stage.{FileChooser, Modality, Stage, StageStyle}
+import scalafx.animation.AnimationTimer
 import core.model.*
 import core.engine.*
 import app.view.TimelineView
 import app.view.components.{ActiveAudioTrackInfo, SelectedClip}
-import scalafx.animation.AnimationTimer
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Future
@@ -36,7 +29,7 @@ class TimelineController:
     )
   )
 
-  private val view: TimelineView = new TimelineView(
+  val view: TimelineView = new TimelineView(
     onDeleteRequested = () => handleDelete(),
     onCutRequested = cursorTime => handleCut(cursorTime),
     onSnapRequested = () => handleSnap(),
@@ -49,7 +42,7 @@ class TimelineController:
     onVideoTimeUpdated = _ => (),
     onClipSelected = _ => (),
     onClipMoved = (clip, targetTrackId, newTime) => handleClipMoved(clip, targetTrackId, newTime),
-    onEffectSelected = effect => handleEffectApplied(effect),
+    onEffectSelected = handleEffectApplied,
     onAudioVolumeChanged = volume => handleAudioVolumeChanged(volume),
     onAddVideoTrackRequested = () => handleAddVideoTrack(),
     onAddAudioTrackRequested = () => handleAddAudioTrack()
@@ -203,137 +196,96 @@ class TimelineController:
     syncMediaPlayback()
 
   private def handleImport(): Unit =
-    val currentWindow = view.getScene.getWindow
-    MediaImporter.chooseGenericMedia(currentWindow).foreach {
-      case ImportedMedia.Video(file, duration) =>
-        val current = state.get()
-        val fileUrl = file.toURI.toString
-        val targetVideoTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
-        val targetAudioTrackId = current.timeline.audioTracks.headOption.map(_.id).getOrElse(1)
+    Option(view.delegate.getScene).flatMap(s => Option(s.getWindow)).foreach { currentWindow =>
+      MediaImporter.chooseGenericMedia(currentWindow).foreach {
+        case ImportedMedia.Video(file, duration) =>
+          val current = state.get()
+          val fileUrl = file.toURI.toString
+          val targetVideoTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
+          val targetAudioTrackId = current.timeline.audioTracks.headOption.map(_.id).getOrElse(1)
 
-        val importedClip = VideoClip(
-          sourceUrl = fileUrl,
-          sourceLength = duration,
-          startTime = current.currentTime,
-          trimStart = 0.0,
-          duration = duration,
-          effect = VideoEffect.None
-        )
+          val importedClip = VideoClip(
+            sourceUrl = fileUrl,
+            sourceLength = duration,
+            startTime = current.currentTime,
+            trimStart = 0.0,
+            duration = duration,
+            effect = VideoEffect.None
+          )
 
-        val updatedTimeline = TimelineEngine.importVideoWithAudio(
-          timeline = current.timeline,
-          videoTrackId = targetVideoTrackId,
-          audioTrackId = targetAudioTrackId,
-          videoClip = importedClip
-        )
-        updateTimelineState(updatedTimeline)
+          val updatedTimeline = TimelineEngine.importVideoWithAudio(
+            timeline = current.timeline,
+            videoTrackId = targetVideoTrackId,
+            audioTrackId = targetAudioTrackId,
+            videoClip = importedClip
+          )
+          updateTimelineState(updatedTimeline)
 
-      case ImportedMedia.Audio(file, duration) =>
-        val current = state.get()
-        val fileUrl = file.toURI.toString
-        val targetAudioTrackId = current.timeline.audioTracks.lift(1).orElse(current.timeline.audioTracks.headOption).map(_.id).getOrElse(1)
+        case ImportedMedia.Audio(file, duration) =>
+          val current = state.get()
+          val fileUrl = file.toURI.toString
+          val targetAudioTrackId = current.timeline.audioTracks.lift(1).orElse(current.timeline.audioTracks.headOption).map(_.id).getOrElse(1)
 
-        val importedClip = AudioClip(
-          sourceUrl = fileUrl,
-          sourceLength = duration,
-          startTime = current.currentTime,
-          trimStart = 0.0,
-          duration = duration
-        )
+          val importedClip = AudioClip(
+            sourceUrl = fileUrl,
+            sourceLength = duration,
+            startTime = current.currentTime,
+            trimStart = 0.0,
+            duration = duration
+          )
 
-        val updatedTimeline = TimelineEngine.addAudioClip(
-          timeline = current.timeline,
-          trackId = targetAudioTrackId,
-          clip = importedClip
-        )
-        updateTimelineState(updatedTimeline)
+          val updatedTimeline = TimelineEngine.addAudioClip(
+            timeline = current.timeline,
+            trackId = targetAudioTrackId,
+            clip = importedClip
+          )
+          updateTimelineState(updatedTimeline)
 
-      case ImportedMedia.Image(file, defaultDuration) =>
-        val current = state.get()
-        val fileUrl = file.toURI.toString
-        val targetVideoTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
+        case ImportedMedia.Image(file, defaultDuration) =>
+          val current = state.get()
+          val fileUrl = file.toURI.toString
+          val targetVideoTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
 
-        val imageClip = ImageClip.create(
-          sourceUrl = fileUrl,
-          startTime = current.currentTime,
-          duration = defaultDuration,
-          effect = VideoEffect.None
-        )
+          val imageClip = ImageClip.create(
+            sourceUrl = fileUrl,
+            startTime = current.currentTime,
+            duration = defaultDuration,
+            effect = VideoEffect.None
+          )
 
-        val updatedTimeline = TimelineEngine.addVideoClip(
-          timeline = current.timeline,
-          trackId = targetVideoTrackId,
-          clip = imageClip
-        )
-        updateTimelineState(updatedTimeline)
+          val updatedTimeline = TimelineEngine.addVideoClip(
+            timeline = current.timeline,
+            trackId = targetVideoTrackId,
+            clip = imageClip
+          )
+          updateTimelineState(updatedTimeline)
+      }
     }
 
   private def handleExport(): Unit =
-    val current = state.get()
-    val currentWindow = view.getScene.getWindow
-    val fileChooser = new FileChooser:
-      title = "Export Timeline Video"
-      extensionFilters.add(new FileChooser.ExtensionFilter("MP4 Video (*.mp4)", "*.mp4"))
-
-    val targetFile = fileChooser.showSaveDialog(currentWindow)
-    if targetFile != null then
+    view.askExportDestination().foreach { targetFile =>
+      val current = state.get()
       val settings = ExportSettings(outputFile = targetFile)
       val exporter = VideoExporter()
+      val dialogOpt = view.createExportProgressDialog()
 
-      val progressLabel = new Label("Preparazione esportazione..."):
-        style = "-fx-font-size: 14px; -fx-font-weight: bold;"
-
-      val progressBar = new ProgressBar:
-        progress = 0.0
-        prefWidth = 320
-        prefHeight = 22
-
-      val dialogStage = new Stage:
-        title = "Esportazione Video"
-        initModality(Modality.ApplicationModal)
-        if currentWindow != null then initOwner(currentWindow)
-        resizable = false
-        scene = new Scene(360, 120):
-          root = new VBox(15, progressLabel, progressBar):
-            padding = Insets(20)
-            alignment = Pos.Center
-
-      dialogStage.show()
+      dialogOpt.foreach(_.show())
 
       Future {
         exporter.exportVideo(
           timeline = current.timeline,
           settings = settings,
-          onProgress = { fraction =>
-            Platform.runLater {
-              progressBar.progress = fraction
-              val percent = Math.min(100, (fraction * 100).toInt)
-              progressLabel.text = s"Esportazione in corso: $percent%"
-            }
-          }
+          onProgress = fraction => dialogOpt.foreach(_.updateProgress(fraction))
         )
       }.flatMap(res => Future.fromTry(res)).onComplete {
         case Success(file) =>
-          Platform.runLater {
-            dialogStage.close()
-            val alert = new Alert(AlertType.Information) {
-              title = "Export Success"
-              headerText = "Video Exported Successfully"
-              contentText = s"Saved to: ${file.getAbsolutePath}"
-            }
-            alert.showAndWait()
-          }
+          dialogOpt.foreach(_.close())
+          view.notifyExportSuccess(file)
         case Failure(exception) =>
-          Platform.runLater {
-            dialogStage.close()
-            val alert = new Alert(AlertType.Error) {
-              title = "Export Failed"
-              headerText = "FFmpeg Export Failed"
-              contentText = exception.getMessage
-            }
-            alert.showAndWait()
-          }
+          dialogOpt.foreach(_.close())
+          view.notifyExportError(exception.getMessage)
       }
+    }
 
   private def handleAddVideoTrack(): Unit =
     val updatedTimeline = TimelineEngine.addVideoTrack(state.get().timeline)
@@ -455,8 +407,6 @@ class TimelineController:
             TimelineEngine.cutAudioClip(acc, track.id, audioIdx, cursorTime - track.clips(audioIdx).startTime)
           else acc
         }
-
-  def viewComponent: VBox = view
 
   view.render(state.get().timeline)
   view.updateHistoryControls(canUndo = false, canRedo = false)

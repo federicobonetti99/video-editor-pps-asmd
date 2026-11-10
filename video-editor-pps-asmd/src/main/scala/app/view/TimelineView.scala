@@ -9,6 +9,7 @@ import scalafx.beans.property.ObjectProperty
 import core.model.*
 import app.view.components.*
 import view.EffectInspectorPane
+import java.io.File
 
 class TimelineView(
                     val onDeleteRequested: () => Unit = () => (),
@@ -257,3 +258,19 @@ class TimelineView(
   def render(timeline: Timeline): Unit =
     currentTimelineProperty.value = Some(timeline)
     timelinePanel.draw(timeline, currentTrackedTimeProperty.value, selectedClipProperty.value)
+
+  def askExportDestination(): Option[File] =
+    Option(delegate.getScene).flatMap(s => Option(s.getWindow)).flatMap { ownerWindow =>
+      ExportDialogUtils.showSaveFileDialog(ownerWindow)
+    }
+  
+  def createExportProgressDialog(): Option[ExportProgressDialog] =
+    Option(delegate.getScene).flatMap(s => Option(s.getWindow)).map { ownerWindow =>
+      new ExportProgressDialog(ownerWindow)
+    }
+
+  def notifyExportSuccess(file: File): Unit =
+    ExportDialogUtils.showSuccessAlert(file)
+
+  def notifyExportError(message: String): Unit =
+    ExportDialogUtils.showErrorAlert(message)

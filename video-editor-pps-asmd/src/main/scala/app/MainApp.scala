@@ -15,6 +15,6 @@ object MainApp extends JFXApp3:
       width = 650
       height = 320
       scene = new Scene {
-        root = controller.viewComponent
+        root = controller.view
       }
     }
