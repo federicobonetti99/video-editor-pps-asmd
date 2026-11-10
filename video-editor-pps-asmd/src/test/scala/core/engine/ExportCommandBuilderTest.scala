@@ -188,3 +188,24 @@ class ExportCommandBuilderTest extends AnyFunSuite:
       s"Missing or incorrect amix configuration: $filterString"
     )
   }
+
+  test("ExportCommandBuilder generates valid zoompan or crop filter for ZoomIn effect") {
+    val zoomEffect = VideoEffect.ZoomIn(targetScale = 2.0)
+    val timeline = createSingleClipTimeline(zoomEffect)
+    val command = ExportCommandBuilder.buildCommand(timeline, defaultSettings)
+
+    val filterIndex = command.arguments.indexOf("-filter_complex")
+    assert(filterIndex != -1, "La lista degli argomenti deve contenere -filter_complex")
+
+    val filterString = command.arguments(filterIndex + 1)
+
+    assert(
+      filterString.contains("zoompan") || filterString.contains("crop="),
+      s"Il filtro non contiene né zoompan né crop per lo ZoomIn. Stringa generata: $filterString"
+    )
+
+    assert(
+      !filterString.contains(",,"),
+      s"Stringa filtro malformata con virgole doppie: $filterString"
+    )
+  }
