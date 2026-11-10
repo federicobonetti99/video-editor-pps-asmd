@@ -75,7 +75,7 @@ class VideoExporterTest extends AnyFunSuite:
     val inputVideoFile = createSyntheticTestVideo()
     val outputVideoFile = File.createTempFile("test_zoom_output_", ".mp4")
     outputVideoFile.deleteOnExit()
-
+  
     val zoomInEffect = VideoEffect.ZoomIn(1.5)
     val clip = VideoClip(
       sourceUrl = s"file:${inputVideoFile.getAbsolutePath}",
@@ -87,11 +87,14 @@ class VideoExporterTest extends AnyFunSuite:
     )
     val timeline = Timeline(videoTracks = List(VideoTrack(id = 1, clips = List(clip))), audioTracks = Nil)
     val settings = ExportSettings(outputFile = outputVideoFile, width = 1920, height = 1080, fps = 30)
-
+  
     val exporter = VideoExporter()
     val result = exporter.exportVideo(timeline, settings)
-
-    assert(result.isSuccess)
+  
+    assert(
+      result.isSuccess,
+      s"FFmpeg è fallito. Messaggio di errore: ${result.failed.map(_.getMessage).getOrElse("Nessun messaggio")}"
+    )
     assert(outputVideoFile.exists())
     assert(outputVideoFile.length() > 0)
   }

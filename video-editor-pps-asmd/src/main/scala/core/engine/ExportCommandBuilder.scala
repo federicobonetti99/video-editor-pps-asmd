@@ -21,7 +21,7 @@ object ExportCommandBuilder:
       case _: Throwable =>
         URLDecoder.decode(url.stripPrefix("file:").stripPrefix("/"), StandardCharsets.UTF_8.name())
 
-  private def formatEffect(effect: VideoEffect, clipDuration: Double): Option[String] =
+  private def formatEffect(effect: VideoEffect, clipDuration: Double, width: Int, height: Int, fps: Int): Option[String] =
     val safeDuration = Math.max(0.001, clipDuration)
     effect match
       case VideoEffect.None => None
@@ -36,12 +36,11 @@ object ExportCommandBuilder:
         Some(s"fade=t=in:st=0:d=${fmt(fadeDur)}")
       case VideoEffect.ZoomIn(targetScale) =>
         val target = Math.max(1.01, targetScale)
-        val zExpr = s"1.0+(${fmt(target)}-1.0)*min(1.0,t/${fmt(safeDuration)})"
-        val cropW = s"trunc(iw/($zExpr)/2)*2"
-        val cropH = s"trunc(ih/($zExpr)/2)*2"
-        Some(s"crop=w=$cropW:h=$cropH:x=(iw-ow)/2:y=(ih-oh)/2")
+        val durationInFrames = Math.max(1, (safeDuration * fps).toInt)
+        val zExpr = s"1.0+(${fmt(target)}-1.0)*(on/$durationInFrames)"
+        Some(s"zoompan=z=$zExpr:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=1:s=${width}x${height}:fps=$fps")
       case VideoEffect.Shake(intensity, frequency) =>
-        val offsetInt = Math.max(2, (intensity.toInt * 2) / 2 * 2)
+        val offsetInt = Math.max(2, (intensity.toInt * 2) / 2)
         val wx = fmt(2 * Math.PI * frequency, 4)
         val wy = fmt(2 * Math.PI * (frequency * 1.3), 4)
         val intVal = fmt(intensity, 2)
@@ -80,8 +79,8 @@ object ExportCommandBuilder:
             Some(s"fps=${settings.fps}"),
             Some(s"trim=duration=${fmt(clip.duration)}"),
             Some("setpts=PTS-STARTPTS"),
-            formatEffect(clip.effect, clip.duration),
             Some(scaleFilter),
+            formatEffect(clip.effect, clip.duration, settings.width, settings.height, settings.fps),
             Some(s"setpts=PTS-STARTPTS+${fmt(clip.startTime)}/TB"),
             Some("setsar=1")
           ).flatten.mkString(",")
@@ -90,8 +89,8 @@ object ExportCommandBuilder:
           Seq(
             Some(s"trim=start=${fmt(clip.trimStart)}:duration=${fmt(clip.duration)}"),
             Some("setpts=PTS-STARTPTS"),
-            formatEffect(clip.effect, clip.duration),
             Some(scaleFilter),
+            formatEffect(clip.effect, clip.duration, settings.width, settings.height, settings.fps),
             Some(s"setpts=PTS-STARTPTS+${fmt(clip.startTime)}/TB"),
             Some("setsar=1")
           ).flatten.mkString(",")
