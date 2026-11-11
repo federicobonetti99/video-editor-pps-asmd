@@ -1,8 +1,9 @@
 package app
 
+import controller.TimelineController
 import scalafx.application.JFXApp3
 import scalafx.scene.Scene
-import app.controller.TimelineController
+
 
 object MainApp extends JFXApp3:
 
