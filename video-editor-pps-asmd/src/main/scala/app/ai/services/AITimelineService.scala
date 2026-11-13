@@ -5,6 +5,7 @@ import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
 import app.ai.domain.*
 import core.engine.TimelineEngine
 import core.model.{ImageClip, Timeline}
+import java.io.File
 import scala.util.boundary.Label
 
 object AITimelineService:
@@ -19,8 +20,9 @@ object AITimelineService:
                        generator: ImageGeneratorCapability
                      )(using Label[AIGenerationError], Label[AIParseError]): Timeline =
     val generatedImage = AIVideoOrchestrator.handleCommand(command)
+    val fileUrl = File(generatedImage.path).toURI.toString
     val clip = ImageClip.create(
-      sourceUrl = generatedImage.path,
+      sourceUrl = fileUrl,
       startTime = timeline.currentTime,
       duration = defaultDuration
     )

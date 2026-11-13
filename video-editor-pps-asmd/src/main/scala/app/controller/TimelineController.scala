@@ -1,17 +1,22 @@
 package app.controller
 
+import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
+import app.ai.capabilities.http.{HttpImageGeneratorCapability, HttpIntentParserCapability, PollinationsImageGeneratorCapability, PollinationsIntentParserCapability}
+import app.ai.domain.*
+import app.ai.services.AITimelineService
 import app.utils.{ImportedMedia, MediaImporter}
-import scalafx.Includes.*
-import scalafx.animation.AnimationTimer
-import core.model.*
-import core.engine.*
 import app.view.TimelineView
 import app.view.components.{ActiveAudioTrackInfo, SelectedClip}
+import core.engine.*
+import core.model.*
+import scalafx.Includes.*
+import scalafx.animation.AnimationTimer
+import scalafx.application.Platform
 
 import java.util.concurrent.atomic.AtomicReference
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Success}
+import scala.concurrent.Future
+import scala.util.{Failure, Success, boundary}
 
 private case class ControllerState(
                                     history: History[Timeline],
@@ -45,7 +50,8 @@ class TimelineController:
     onEffectSelected = handleEffectApplied,
     onAudioVolumeChanged = volume => handleAudioVolumeChanged(volume),
     onAddVideoTrackRequested = () => handleAddVideoTrack(),
-    onAddAudioTrackRequested = () => handleAddAudioTrack()
+    onAddAudioTrackRequested = () => handleAddAudioTrack(),
+    onAICommandRequested = command => handleAICommand(command)
   )
 
   private val inputHandler = new InputHandler(
@@ -260,6 +266,41 @@ class TimelineController:
           )
           updateTimelineState(updatedTimeline)
       }
+    }
+
+  private def handleAICommand(command: String): Unit =
+    given IntentParserCapability = PollinationsIntentParserCapability
+
+    given ImageGeneratorCapability = PollinationsImageGeneratorCapability
+
+    val current = state.get()
+    val targetTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
+    val timelineAtCursor = current.timeline.copy(currentTime = current.currentTime)
+
+    Future {
+      boundary[AIGenerationError | AIParseError | Timeline]:
+        AITimelineService.processAndApply(
+          command = command,
+          timeline = timelineAtCursor,
+          trackId = targetTrackId
+        )
+    }.onComplete {
+      case Success(updatedTimeline: Timeline) =>
+        Platform.runLater {
+          updateTimelineState(updatedTimeline)
+        }
+      case Success(err: AIParseError) =>
+        Platform.runLater {
+          view.notifyExportError(err.reason)
+        }
+      case Success(err: AIGenerationError) =>
+        Platform.runLater {
+          view.notifyExportError(err.reason)
+        }
+      case Failure(ex) =>
+        Platform.runLater {
+          view.notifyExportError(Option(ex.getMessage).getOrElse("Errore imprevisto IA"))
+        }
     }
 
   private def handleExport(): Unit =

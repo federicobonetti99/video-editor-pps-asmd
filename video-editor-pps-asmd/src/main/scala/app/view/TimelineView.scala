@@ -3,7 +3,7 @@ package app.view
 import scalafx.Includes.*
 import scalafx.application.Platform
 import scalafx.geometry.Pos
-import scalafx.scene.control.{Label, ScrollPane, Slider}
+import scalafx.scene.control.{Button, Label, ScrollPane, Slider, TextField}
 import scalafx.scene.layout.{HBox, Priority, Region, StackPane, VBox}
 import scalafx.beans.property.ObjectProperty
 import core.model.*
@@ -27,7 +27,8 @@ class TimelineView(
                     val onEffectSelected: VideoEffect => Unit = _ => (),
                     val onAudioVolumeChanged: Double => Unit = _ => (),
                     val onAddVideoTrackRequested: () => Unit = () => (),
-                    val onAddAudioTrackRequested: () => Unit = () => ()
+                    val onAddAudioTrackRequested: () => Unit = () => (),
+                    val onAICommandRequested: String => Unit = _ => ()
                   ) extends VBox:
 
   spacing = 0
@@ -161,6 +162,23 @@ class TimelineView(
     vbarPolicy = ScrollPane.ScrollBarPolicy.AsNeeded
     style = "-fx-background: #1e1e1e; -fx-border-color: #333333; -fx-border-width: 1px;"
 
+  private val aiPromptField = new TextField:
+    promptText = "Assistente IA: es. 'Genera immagine di un tramonto sul mare'..."
+    hgrow = Priority.Always
+    style = "-fx-background-color: #252526; -fx-text-fill: #e0e0e0; -fx-prompt-text-fill: #777777; -fx-border-color: #3c3c3c; -fx-border-radius: 4px; -fx-background-radius: 4px; -fx-padding: 6 10 6 10;"
+    onAction = _ => submitAICommand()
+    onKeyReleased = e => e.consume()
+
+  private val aiGenerateButton = new Button("Genera IA"):
+    focusTraversable = false
+    style = "-fx-background-color: #3a6ea5; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4px; -fx-padding: 6 14 6 14; -fx-cursor: hand;"
+    onAction = _ => submitAICommand()
+
+  private val aiPromptBar = new HBox:
+    spacing = 10
+    alignment = Pos.CenterLeft
+    children = Seq(aiPromptField, aiGenerateButton)
+
   private val toolbar = new ToolbarControls(
     onImport = () => onImportRequested(),
     onExport = () => onExportRequested(),
@@ -178,9 +196,20 @@ class TimelineView(
   private val bottomSection = new VBox:
     spacing = 15
     style = "-fx-padding: 0 15 15 15;"
-    children = Seq(timelineScrollPane, toolbar)
+    children = Seq(timelineScrollPane, aiPromptBar, toolbar)
 
   children = Seq(previewViewport, bottomSection)
+
+  private def submitAICommand(): Unit =
+    val cmd = aiPromptField.text.value.trim
+    if cmd.nonEmpty then
+      setAILoading(true)
+      onAICommandRequested(cmd)
+
+  def setAILoading(loading: Boolean): Unit =
+    aiPromptField.disable = loading
+    aiGenerateButton.disable = loading
+    aiGenerateButton.text = if loading then "Generazione..." else "Genera IA"
 
   private def handleUserSeek(newTime: Double): Unit =
     currentTrackedTimeProperty.value = newTime
@@ -256,6 +285,9 @@ class TimelineView(
     audioPlayer.update(activeAudios, isPlaying)
 
   def render(timeline: Timeline): Unit =
+    if aiGenerateButton.disable.value then
+      aiPromptField.text = ""
+      setAILoading(false)
     currentTimelineProperty.value = Some(timeline)
     timelinePanel.draw(timeline, currentTrackedTimeProperty.value, selectedClipProperty.value)
 
@@ -263,7 +295,7 @@ class TimelineView(
     Option(delegate.getScene).flatMap(s => Option(s.getWindow)).flatMap { ownerWindow =>
       ExportDialogUtils.showSaveFileDialog(ownerWindow)
     }
-  
+
   def createExportProgressDialog(): Option[ExportProgressDialog] =
     Option(delegate.getScene).flatMap(s => Option(s.getWindow)).map { ownerWindow =>
       new ExportProgressDialog(ownerWindow)
@@ -273,4 +305,5 @@ class TimelineView(
     ExportDialogUtils.showSuccessAlert(file)
 
   def notifyExportError(message: String): Unit =
+    setAILoading(false)
     ExportDialogUtils.showErrorAlert(message)
