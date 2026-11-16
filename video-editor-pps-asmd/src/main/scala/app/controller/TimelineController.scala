@@ -1,7 +1,7 @@
 package app.controller
 
 import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
-import app.ai.capabilities.http.{HttpImageGeneratorCapability, HttpIntentParserCapability, PollinationsImageGeneratorCapability, PollinationsIntentParserCapability}
+import app.ai.capabilities.http.{HttpImageGeneratorCapability, HttpIntentParserCapability}
 import app.ai.domain.*
 import app.ai.services.AITimelineService
 import app.utils.{ImportedMedia, MediaImporter}
@@ -33,6 +33,9 @@ class TimelineController:
       history = History(current = Timeline.default)
     )
   )
+
+  private val intentParser: IntentParserCapability = new HttpIntentParserCapability()
+  private val imageGenerator: ImageGeneratorCapability = new HttpImageGeneratorCapability()
 
   val view: TimelineView = new TimelineView(
     onDeleteRequested = () => handleDelete(),
@@ -269,9 +272,8 @@ class TimelineController:
     }
 
   private def handleAICommand(command: String): Unit =
-    given IntentParserCapability = PollinationsIntentParserCapability
-
-    given ImageGeneratorCapability = PollinationsImageGeneratorCapability
+    given IntentParserCapability = intentParser
+    given ImageGeneratorCapability = imageGenerator
 
     val current = state.get()
     val targetTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
