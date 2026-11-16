@@ -1,4 +1,4 @@
-package app.ai.agents
+package spike
 
 import java.awt.Desktop
 import java.net.URI
@@ -8,8 +8,8 @@ import java.nio.file.{Files, Path, Paths}
 import java.time.Duration
 import java.util.Base64
 import scala.annotation.tailrec
-import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.DurationInt
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.io.StdIn
 import scala.util.Try
 
