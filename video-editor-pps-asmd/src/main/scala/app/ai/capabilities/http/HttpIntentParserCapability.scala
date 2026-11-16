@@ -63,7 +63,7 @@ final class HttpIntentParserCapability(
 
     parseCloudflareIntent(responseBody, cleaned)
 
-  private def parseCloudflareIntent(responseBody: String, rawText: String)(using Label[AIParseError]): UserIntent =
+  private[http] def parseCloudflareIntent(responseBody: String, rawText: String)(using Label[AIParseError]): UserIntent =
     val root = MiniJson.parse(responseBody) match
       case Right(v)  => v
       case Left(err) => break(AIParseError(s"JSON Cloudflare non valido ($err): ${responseBody.take(250)}"))

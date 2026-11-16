@@ -3,6 +3,7 @@ package app.ai.capabilities.http
 import app.ai.capabilities.ImageGeneratorCapability
 import app.ai.domain.{AIGenerationError, GeneratedImage}
 
+import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.net.URI
 import java.net.http.{HttpRequest, HttpResponse}
@@ -42,7 +43,7 @@ final class HttpImageGeneratorCapability(
 
       val response = SharedHttpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
       if response.statusCode() == 200 then response.body()
-      else break(AIGenerationError(s"Errore Cloudflare (HTTP ${response.statusCode()}):${response.body().take(250)}"))
+      else break(AIGenerationError(s"Errore Cloudflare (HTTP ${response.statusCode()}): ${response.body().take(250)}"))
     }.getOrElse(break(AIGenerationError("Errore di rete durante la chiamata a Cloudflare.")))
 
     val base64Opt = for
@@ -64,14 +65,7 @@ final class HttpImageGeneratorCapability(
       break(AIGenerationError("Formato immagine non leggibile da ImageIO."))
     )
 
-    // Ritaglio centrale 16:9 (da 1024x1024 a 1024x576)
-    val width = rawImg.getWidth
-    val height = rawImg.getHeight
-    val targetHeight = Math.min(height, (width * 9) / 16)
-    val yOffset = (height - targetHeight) / 2
-    val croppedImg =
-      if targetHeight < height then rawImg.getSubimage(0, yOffset, width, targetHeight)
-      else rawImg
+    val croppedImg = cropTo16x9(rawImg)
 
     val savedPath = Try {
       Files.createDirectories(outputDir)
@@ -87,3 +81,11 @@ final class HttpImageGeneratorCapability(
       height = croppedImg.getHeight,
       prompt = prompt
     )
+
+  private[http] def cropTo16x9(rawImg: BufferedImage): BufferedImage =
+    val width = rawImg.getWidth
+    val height = rawImg.getHeight
+    val targetHeight = Math.min(height, (width * 9) / 16)
+    val yOffset = (height - targetHeight) / 2
+    if targetHeight < height then rawImg.getSubimage(0, yOffset, width, targetHeight)
+    else rawImg
