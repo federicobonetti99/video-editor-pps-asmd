@@ -2,22 +2,22 @@ package app.ai.domain
 
 import core.model.VideoEffect
 
-final case class ScenePlan(
-                            index: Int,
-                            narration: String,
-                            visualPrompt: String,
-                            durationSeconds: Double,
-                            effect: VideoEffect = VideoEffect.None
-                          )
+final case class SceneDirective(
+                                 sceneNumber: Int,
+                                 shotType: String,
+                                 narration: String,
+                                 visualPrompt: String,
+                                 durationSeconds: Double = 5.0,
+                                 effect: VideoEffect = VideoEffect.None
+                               )
 
 final case class StoryboardPlan(
-                                 title: String,
-                                 visualStyleBible: String,
-                                 scenes: List[ScenePlan]
+                                 styleBible: String,
+                                 scenes: List[SceneDirective]
                                )
 
 final case class SceneAsset(
-                             plan: ScenePlan,
+                             directive: SceneDirective,
                              image: GeneratedImage,
                              audioPathOpt: Option[String] = None
                            )
