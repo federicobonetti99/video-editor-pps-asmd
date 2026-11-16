@@ -127,7 +127,7 @@ final class GroqStoryboardPlannerCapability(
       .headOption
       .getOrElse(break(AIDirectorError("Nessun modello chat disponibile sul tuo account Groq.")))
 
-  private[http] def parseStoryboardFromGroq(responseBody: String)(using Label[AIDirectorError]): StoryboardPlan =
+  private[ai] def parseStoryboardFromGroq(responseBody: String)(using Label[AIDirectorError]): StoryboardPlan =
     val root = MiniJson.parse(responseBody).getOrElse(
       break(AIDirectorError("Risposta JSON Groq non parsabile."))
     )
@@ -171,7 +171,7 @@ final class GroqStoryboardPlannerCapability(
     StoryboardPlan(styleBible, directives)
 
 object GroqStoryboardPlannerCapability:
-  private[http] def scoreGroqModel(id: String): Int =
+  private[ai] def scoreGroqModel(id: String): Int =
     val lower = id.toLowerCase
     if lower.contains("whisper") || lower.contains("guard") || lower.contains("tts") ||
       lower.contains("orpheus") || lower.contains("playai") || lower.contains("embed") ||
