@@ -1,6 +1,6 @@
 package app.ai.services
 
-import app.ai.agents.AIVideoOrchestrator
+import app.ai.agents.QuickCommandOrchestrator
 import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
 import app.ai.domain.*
 import core.engine.TimelineEngine
@@ -19,7 +19,7 @@ object AITimelineService:
                        parser: IntentParserCapability,
                        generator: ImageGeneratorCapability
                      )(using Label[AIGenerationError], Label[AIParseError]): Timeline =
-    val generatedImage = AIVideoOrchestrator.handleCommand(command)
+    val generatedImage = QuickCommandOrchestrator.handleCommand(command)
     val fileUrl = File(generatedImage.path).toURI.toString
     val clip = ImageClip.create(
       sourceUrl = fileUrl,

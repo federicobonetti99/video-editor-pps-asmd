@@ -1,6 +1,6 @@
 package app.ai
 
-import app.ai.agents.AIVideoOrchestrator
+import app.ai.agents.QuickCommandOrchestrator
 import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
 import app.ai.domain.*
 import app.ai.services.AITimelineService
@@ -60,7 +60,7 @@ class AITimelineFlowTest extends AnyFunSuite with Matchers:
         fail("ImageGeneratorCapability non deve essere chiamata se il parsing fallisce")
 
     val outcome = boundary[AIGenerationError | AIParseError | GeneratedImage]:
-      AIVideoOrchestrator.handleCommand("comando malformato")
+      QuickCommandOrchestrator.handleCommand("comando malformato")
 
     outcome shouldBe AIParseError("Errore di parsing simulato")
   }
@@ -75,7 +75,7 @@ class AITimelineFlowTest extends AnyFunSuite with Matchers:
         fail("ImageGeneratorCapability non deve essere chiamata per intenti Unknown")
 
     val outcome = boundary[AIGenerationError | AIParseError | GeneratedImage]:
-      AIVideoOrchestrator.handleCommand("raccontami una barzelletta")
+      QuickCommandOrchestrator.handleCommand("raccontami una barzelletta")
 
     outcome shouldBe a[AIGenerationError]
   }

@@ -4,7 +4,7 @@ import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
 import app.ai.domain.*
 import scala.util.boundary.{Label, break}
 
-object AIVideoOrchestrator:
+object QuickCommandOrchestrator:
 
   def handleCommand(command: String)(using
                                      parser: IntentParserCapability,
