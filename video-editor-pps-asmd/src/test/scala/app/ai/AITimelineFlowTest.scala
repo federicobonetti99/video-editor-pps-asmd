@@ -3,7 +3,7 @@ package app.ai
 import app.ai.agents.QuickCommandOrchestrator
 import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
 import app.ai.domain.*
-import app.ai.services.AITimelineService
+import app.ai.services.{AIActionOutcome, AITimelineService}
 import core.model.*
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
@@ -32,7 +32,7 @@ class AITimelineFlowTest extends AnyFunSuite with Matchers:
 
     val initialTimeline = Timeline.default.copy(currentTime = 4.5)
 
-    val outcome = boundary[AIGenerationError | AIParseError | Timeline]:
+    val outcome = boundary[AIGenerationError | AIParseError | AIActionOutcome]:
       AITimelineService.processAndApply(
         command = "genera un elefante",
         timeline = initialTimeline,
@@ -41,16 +41,16 @@ class AITimelineFlowTest extends AnyFunSuite with Matchers:
       )
 
     outcome match
-      case updated: Timeline =>
+      case AIActionOutcome.UpdatedTimeline(updated) =>
         val clips = updated.videoTracks.find(_.id == 1).map(_.clips).getOrElse(Nil)
         clips should have size 1
         clips.head.startTime shouldBe 4.5
         clips.head.duration shouldBe 6.0
       case other =>
-        fail(s"Attesa Timeline aggiornata, ricevuto: $other")
+        fail(s"Atteso AIActionOutcome.UpdatedTimeline, ricevuto: $other")
   }
 
-  test("AIVideoOrchestrator propaga AIParseError senza invocare il generatore di immagini") {
+  test("QuickCommandOrchestrator propaga AIParseError senza invocare il generatore di immagini") {
     given IntentParserCapability with
       override def parse(text: String)(using boundary.Label[AIParseError]): UserIntent =
         break(AIParseError("Errore di parsing simulato"))
@@ -65,7 +65,7 @@ class AITimelineFlowTest extends AnyFunSuite with Matchers:
     outcome shouldBe AIParseError("Errore di parsing simulato")
   }
 
-  test("AIVideoOrchestrator restituisce AIGenerationError se l'intento è Unknown") {
+  test("QuickCommandOrchestrator restituisce AIGenerationError se l'intento è Unknown") {
     given IntentParserCapability with
       override def parse(text: String)(using boundary.Label[AIParseError]): UserIntent =
         UserIntent.Unknown(text)
