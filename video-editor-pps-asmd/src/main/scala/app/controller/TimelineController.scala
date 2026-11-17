@@ -3,7 +3,7 @@ package app.controller
 import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability, StoryboardPlannerCapability}
 import app.ai.capabilities.http.{GroqStoryboardPlannerCapability, HttpImageGeneratorCapability, HttpIntentParserCapability}
 import app.ai.domain.*
-import app.ai.services.{AIDirectorService, AITimelineService}
+import app.ai.services.{AIActionOutcome, AIDirectorService, AITimelineService}
 import app.utils.{ImportedMedia, MediaImporter}
 import app.view.TimelineView
 import app.view.components.{ActiveAudioTrackInfo, SelectedClip}
@@ -275,6 +275,7 @@ class TimelineController:
 
   private def handleAICommand(command: String): Unit =
     given IntentParserCapability = intentParser
+
     given ImageGeneratorCapability = imageGenerator
 
     val current = state.get()
@@ -282,16 +283,20 @@ class TimelineController:
     val timelineAtCursor = current.timeline.copy(currentTime = current.currentTime)
 
     Future {
-      boundary[AIGenerationError | AIParseError | Timeline]:
+      boundary[AIGenerationError | AIParseError | AIActionOutcome]:
         AITimelineService.processAndApply(
           command = command,
           timeline = timelineAtCursor,
           trackId = targetTrackId
         )
     }.onComplete {
-      case Success(updatedTimeline: Timeline) =>
+      case Success(AIActionOutcome.UpdatedTimeline(updatedTimeline)) =>
         Platform.runLater {
           updateTimelineState(updatedTimeline)
+        }
+      case Success(AIActionOutcome.TriggerUndo) =>
+        Platform.runLater {
+          handleUndo()
         }
       case Success(err: AIParseError) =>
         Platform.runLater {
