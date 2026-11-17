@@ -76,7 +76,7 @@ final class HttpImageGeneratorCapability(
     }.getOrElse(break(AIGenerationError("Impossibile salvare l'immagine ritagliata su disco.")))
 
     GeneratedImage(
-      path = savedPath.toAbsolutePath.toString,
+      path = savedPath.toAbsolutePath.toUri.toString,
       width = croppedImg.getWidth,
       height = croppedImg.getHeight,
       prompt = prompt

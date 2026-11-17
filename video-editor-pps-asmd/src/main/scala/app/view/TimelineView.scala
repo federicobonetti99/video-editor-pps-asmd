@@ -7,6 +7,7 @@ import scalafx.scene.control.{Button, Label, ScrollPane, Slider, TextField}
 import scalafx.scene.layout.{HBox, Priority, Region, StackPane, VBox}
 import scalafx.beans.property.ObjectProperty
 import core.model.*
+import app.ai.domain.SceneAsset
 import app.view.components.*
 import view.EffectInspectorPane
 import java.io.File
@@ -28,7 +29,8 @@ class TimelineView(
                     val onAudioVolumeChanged: Double => Unit = _ => (),
                     val onAddVideoTrackRequested: () => Unit = () => (),
                     val onAddAudioTrackRequested: () => Unit = () => (),
-                    val onAICommandRequested: String => Unit = _ => ()
+                    val onAICommandRequested: String => Unit = _ => (),
+                    val onAIStoryRequested: String => Unit = _ => ()
                   ) extends VBox:
 
   spacing = 0
@@ -47,13 +49,25 @@ class TimelineView(
     maxHeight = 20.0
     style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 0 0 1px 0;"
 
-  private val leftMask = new Region:
-    hgrow = Priority.Always
-    minWidth = 0.0
+  private val leftMaskBackground = new Region:
     prefHeight = 270.0
     minHeight = 270.0
     maxHeight = 270.0
     style = "-fx-background-color: #1e1e1e; -fx-border-color: #2d2d2d; -fx-border-width: 0 1px 0 0;"
+
+  private val directorPanel = new AIDirectorPanel(
+    onGenerateStory = story => onAIStoryRequested(story)
+  )
+
+  private val leftMask = new StackPane:
+    hgrow = Priority.Always
+    minWidth = 0.0
+    prefWidth = 0.0
+    prefHeight = 270.0
+    minHeight = 270.0
+    maxHeight = 270.0
+    alignment = Pos.TopLeft
+    children = Seq(leftMaskBackground, directorPanel)
 
   private val middleSpacer = new Region:
     minWidth = 480.0
@@ -78,6 +92,7 @@ class TimelineView(
   private val rightMask = new StackPane:
     hgrow = Priority.Always
     minWidth = 0.0
+    prefWidth = 0.0
     prefHeight = 270.0
     minHeight = 270.0
     maxHeight = 270.0
@@ -94,6 +109,7 @@ class TimelineView(
 
   HBox.setHgrow(leftMask, Priority.Always)
   HBox.setHgrow(rightMask, Priority.Always)
+  StackPane.setAlignment(directorPanel, Pos.TopLeft)
   StackPane.setAlignment(effectInspector, Pos.TopLeft)
 
   private val zoomLabel = new Label("Zoom:"):
@@ -210,6 +226,15 @@ class TimelineView(
     aiPromptField.disable = loading
     aiGenerateButton.disable = loading
     aiGenerateButton.text = if loading then "Generazione..." else "Genera IA"
+
+  def setDirectorStatus(message: String): Unit =
+    directorPanel.setLoading(true, message)
+
+  def notifyDirectorSuccess(assets: List[SceneAsset]): Unit =
+    directorPanel.showGeneratedScenes(assets)
+
+  def notifyDirectorError(message: String): Unit =
+    directorPanel.showError(message)
 
   private def handleUserSeek(newTime: Double): Unit =
     currentTrackedTimeProperty.value = newTime

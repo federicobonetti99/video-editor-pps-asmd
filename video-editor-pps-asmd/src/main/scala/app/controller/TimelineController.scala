@@ -1,9 +1,9 @@
 package app.controller
 
-import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
-import app.ai.capabilities.http.{HttpImageGeneratorCapability, HttpIntentParserCapability}
+import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability, StoryboardPlannerCapability}
+import app.ai.capabilities.http.{GroqStoryboardPlannerCapability, HttpImageGeneratorCapability, HttpIntentParserCapability}
 import app.ai.domain.*
-import app.ai.services.AITimelineService
+import app.ai.services.{AIDirectorService, AITimelineService}
 import app.utils.{ImportedMedia, MediaImporter}
 import app.view.TimelineView
 import app.view.components.{ActiveAudioTrackInfo, SelectedClip}
@@ -36,6 +36,7 @@ class TimelineController:
 
   private val intentParser: IntentParserCapability = new HttpIntentParserCapability()
   private val imageGenerator: ImageGeneratorCapability = new HttpImageGeneratorCapability()
+  private val storyboardPlanner: StoryboardPlannerCapability = new GroqStoryboardPlannerCapability()
 
   val view: TimelineView = new TimelineView(
     onDeleteRequested = () => handleDelete(),
@@ -54,7 +55,8 @@ class TimelineController:
     onAudioVolumeChanged = volume => handleAudioVolumeChanged(volume),
     onAddVideoTrackRequested = () => handleAddVideoTrack(),
     onAddAudioTrackRequested = () => handleAddAudioTrack(),
-    onAICommandRequested = command => handleAICommand(command)
+    onAICommandRequested = command => handleAICommand(command),
+    onAIStoryRequested = story => handleAIStory(story)
   )
 
   private val inputHandler = new InputHandler(
@@ -304,6 +306,42 @@ class TimelineController:
           view.notifyExportError(Option(ex.getMessage).getOrElse("Errore imprevisto IA"))
         }
     }
+
+  private def handleAIStory(story: String): Unit =
+    given StoryboardPlannerCapability = storyboardPlanner
+    given ImageGeneratorCapability = imageGenerator
+
+    val current = state.get()
+    val targetTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)
+    val timelineAtCursor = current.timeline.copy(currentTime = current.currentTime)
+
+    view.setDirectorStatus("Pianificazione storyboard e rendering scene...")
+
+    AIDirectorService
+      .generateAndAppendStory(
+        story = story,
+        timeline = timelineAtCursor,
+        trackId = targetTrackId
+      )
+      .onComplete {
+        case Success(Right(directed)) =>
+          Platform.runLater {
+            updateTimelineState(directed.timeline)
+            view.notifyDirectorSuccess(directed.scope.orderedAssets)
+          }
+        case Success(Left(err: AIDirectorError)) =>
+          Platform.runLater {
+            view.notifyDirectorError(err.reason)
+          }
+        case Success(Left(err: AIGenerationError)) =>
+          Platform.runLater {
+            view.notifyDirectorError(err.reason)
+          }
+        case Failure(ex) =>
+          Platform.runLater {
+            view.notifyDirectorError(Option(ex.getMessage).getOrElse("Errore imprevisto del Regista AI"))
+          }
+      }
 
   private def handleExport(): Unit =
     view.askExportDestination().foreach { targetFile =>
