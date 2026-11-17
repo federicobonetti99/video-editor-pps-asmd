@@ -1,7 +1,7 @@
 package app.controller
 
-import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability, StoryboardPlannerCapability}
-import app.ai.capabilities.http.{GroqStoryboardPlannerCapability, HttpImageGeneratorCapability, HttpIntentParserCapability}
+import app.ai.capabilities.{AudioGeneratorCapability, ImageGeneratorCapability, IntentParserCapability, StoryboardPlannerCapability}
+import app.ai.capabilities.http.{EdgeAudioGeneratorCapability, GroqStoryboardPlannerCapability, HttpImageGeneratorCapability, HttpIntentParserCapability}
 import app.ai.domain.*
 import app.ai.services.{AIActionOutcome, AIDirectorService, AITimelineService}
 import app.utils.{ImportedMedia, MediaImporter}
@@ -36,6 +36,7 @@ class TimelineController:
 
   private val intentParser: IntentParserCapability = new HttpIntentParserCapability()
   private val imageGenerator: ImageGeneratorCapability = new HttpImageGeneratorCapability()
+  private val audioGenerator: AudioGeneratorCapability = new EdgeAudioGeneratorCapability()
   private val storyboardPlanner: StoryboardPlannerCapability = new GroqStoryboardPlannerCapability()
 
   val view: TimelineView = new TimelineView(
@@ -275,8 +276,8 @@ class TimelineController:
 
   private def handleAICommand(command: String): Unit =
     given IntentParserCapability = intentParser
-
     given ImageGeneratorCapability = imageGenerator
+    given AudioGeneratorCapability = audioGenerator
 
     val current = state.get()
     val targetTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)

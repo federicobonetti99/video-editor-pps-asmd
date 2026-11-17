@@ -10,11 +10,12 @@ sealed trait UserIntent
 
 object UserIntent:
   case class GenerateImage(prompt: String) extends UserIntent
+  case class GenerateSpeech(text: String) extends UserIntent
   case class CutClip(timestamp: Double) extends UserIntent
   case class ApplyEffect(effectName: String) extends UserIntent
   case class AdjustEffect(
                            direction: AdjustDirection,
-                           parameter: Option[String] = None, // "intensity", "frequency", "scale", "duration", "brightness"
+                           parameter: Option[String] = None,
                            amount: Option[Double] = None
                          ) extends UserIntent
   case class AdjustAudioVolume(

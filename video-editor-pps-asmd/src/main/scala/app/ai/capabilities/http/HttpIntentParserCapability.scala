@@ -35,6 +35,7 @@ final class HttpIntentParserCapability(
       "Sei l'interprete e router dei comandi della barra rapida di un video editor. " +
         "Analizza la richiesta dell'utente e invoca SEMPRE uno dei tool disponibili:\n" +
         "- generate_image: creare/generare un'immagine (traduci 'prompt' in inglese).\n" +
+        "- generate_speech: generare una voce parlata / voiceover da un testo (estrai in 'text' la frase esatta da far pronunciare nella lingua richiesta).\n" +
         "- cut_clip: tagliare/dividere una clip al secondo 'timestamp' (-1.0 se al cursore).\n" +
         "- apply_effect: applicare un nuovo effetto ('ZoomIn', 'Shake', 'FadeIn', 'Brightness', 'Grayscale', 'Sepia', 'Invert', 'None').\n" +
         "- adjust_effect: modificare i parametri di un effetto già attivo ('increase', 'decrease', 'set').\n" +
@@ -47,6 +48,7 @@ final class HttpIntentParserCapability(
     val toolsJson =
       """[
         |  {"type":"function","function":{"name":"generate_image","description":"Genera una nuova immagine.","parameters":{"type":"object","properties":{"prompt":{"type":"string"}},"required":["prompt"]}}},
+        |  {"type":"function","function":{"name":"generate_speech","description":"Genera una voce parlata da un testo (Text-to-Speech).","parameters":{"type":"object","properties":{"text":{"type":"string","description":"La frase esatta che la voce deve pronunciare."}},"required":["text"]}}},
         |  {"type":"function","function":{"name":"cut_clip","description":"Taglia la clip al timestamp.","parameters":{"type":"object","properties":{"timestamp":{"type":"number"}},"required":["timestamp"]}}},
         |  {"type":"function","function":{"name":"apply_effect","description":"Applica un effetto visivo.","parameters":{"type":"object","properties":{"effect":{"type":"string","enum":["ZoomIn","Shake","FadeIn","Brightness","Grayscale","Sepia","Invert","None"]}},"required":["effect"]}}},
         |  {"type":"function","function":{"name":"adjust_effect","description":"Modifica i parametri dell'effetto attivo.","parameters":{"type":"object","properties":{"direction":{"type":"string","enum":["increase","decrease","set"]},"parameter":{"type":"string","enum":["intensity","frequency","scale","duration","brightness"]},"amount":{"type":"number"}},"required":["direction"]}}},
@@ -200,6 +202,10 @@ final class HttpIntentParserCapability(
       case "generate_image" =>
         val prompt = argsObj.get("prompt").flatMap(_.str).map(_.trim).filter(_.nonEmpty).getOrElse(rawText)
         UserIntent.GenerateImage(prompt)
+
+      case "generate_speech" =>
+        val speechText = argsObj.get("text").flatMap(_.str).map(_.trim).filter(_.nonEmpty).getOrElse(rawText)
+        UserIntent.GenerateSpeech(speechText)
 
       case "cut_clip" =>
         val ts = argsObj.get("timestamp").flatMap(_.double).getOrElse(-1.0)

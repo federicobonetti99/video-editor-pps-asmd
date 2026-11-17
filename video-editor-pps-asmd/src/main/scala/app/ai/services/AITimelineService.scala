@@ -1,6 +1,6 @@
 package app.ai.services
 
-import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
+import app.ai.capabilities.{AudioGeneratorCapability, ImageGeneratorCapability, IntentParserCapability}
 import app.ai.domain.*
 import core.engine.TimelineEngine
 import core.model.*
@@ -21,7 +21,8 @@ object AITimelineService:
                        defaultDuration: Double = 5.0
                      )(using
                        parser: IntentParserCapability,
-                       generator: ImageGeneratorCapability
+                       generator: ImageGeneratorCapability,
+                       audioGenerator: AudioGeneratorCapability
                      )(using Label[AIGenerationError], Label[AIParseError]): AIActionOutcome =
     val intent = resolveIntentFastOrLLM(command)
     executeIntent(intent, timeline, trackId, defaultDuration)
@@ -55,7 +56,8 @@ object AITimelineService:
                              trackId: Int,
                              defaultDuration: Double
                            )(using
-                             generator: ImageGeneratorCapability
+                             generator: ImageGeneratorCapability,
+                             audioGenerator: AudioGeneratorCapability
                            )(using Label[AIGenerationError]): AIActionOutcome =
     intent match
       case UserIntent.Undo =>
@@ -72,6 +74,28 @@ object AITimelineService:
           duration = defaultDuration
         )
         AIActionOutcome.UpdatedTimeline(TimelineEngine.addVideoClip(timeline, trackId, clip))
+
+      case UserIntent.GenerateSpeech(text) =>
+        val generatedAudio = audioGenerator.generateSpeech(text)
+        val uriUrl =
+          if generatedAudio.path.startsWith("file:") then generatedAudio.path
+          else Paths.get(generatedAudio.path).toAbsolutePath.toUri.toString
+        val clip = AudioClip(
+          sourceUrl = uriUrl,
+          sourceLength = generatedAudio.durationSeconds,
+          timing = ClipTiming(
+            startTime = timeline.currentTime,
+            trimStart = 0.0,
+            duration = generatedAudio.durationSeconds
+          ),
+          volume = 1.0
+        )
+        val (targetTimeline, targetAudioTrackId) = timeline.audioTracks.headOption match
+          case Some(t) => (timeline, t.id)
+          case None =>
+            val withTrack = TimelineEngine.addAudioTrack(timeline)
+            (withTrack, withTrack.audioTracks.head.id)
+        AIActionOutcome.UpdatedTimeline(TimelineEngine.addAudioClip(targetTimeline, targetAudioTrackId, clip))
 
       case UserIntent.CutClip(rawTimestamp) =>
         val cutTime = if rawTimestamp >= 0.0 then rawTimestamp else timeline.currentTime
