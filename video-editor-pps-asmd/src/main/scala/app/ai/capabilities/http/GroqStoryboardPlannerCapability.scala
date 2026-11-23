@@ -28,12 +28,14 @@ final class GroqStoryboardPlannerCapability(
 
     val systemInstruction =
       "Sei un regista cinematografico esperto per un sistema multi-agente. " +
-        "Analizza l'intera storia dall'inizio alla fine, dividila in 4 o 5 scene distinte " +
+        "Analizza l'intera storia dall'inizio alla fine, dividila in 4 o 5 scene cronologiche distinte " +
         "che coprano tutti gli eventi della trama (introduzione, incontro/sviluppo, azione centrale, finale) " +
         "e invoca il tool dispatch_visual_artists una sola volta passando TUTTE le scene nell'array scenes. " +
-        "Definisci prima visual_style_bible in inglese (aspetto esatto dei personaggi, colori, stile 3D/illustrazione) " +
-        "e ripeti quegli stessi dettagli visivi in inglese dentro ogni singolo visual_prompt. " +
-        "Scrivi narration in italiano scorrevole per il doppiaggio."
+        "REGOLA VISIVA FONDAMENTALE: visual_style_bible deve contenere SOLO la tecnica artistica, la palette colori, " +
+        "l'illuminazione e l'aspetto base del protagonista (MAI oggetti, luoghi o personaggi che appaiono solo nelle scene successive). " +
+        "Ogni singolo visual_prompt deve descrivere ESCLUSIVAMENTE ciò che è fisicamente visibile nell'inquadratura di QUEL preciso momento: " +
+        "non menzionare mai eventi passati o futuri (es. non scrivere 'prima di incontrare il drago', perché il generatore di immagini disegnerebbe il drago nella scena 1). " +
+        "Scrivi narration in italiano scorrevole e coinvolgente per il doppiaggio."
 
     val payload =
       s"""{
@@ -55,7 +57,7 @@ final class GroqStoryboardPlannerCapability(
          |          "properties": {
          |            "visual_style_bible": {
          |              "type": "string",
-         |              "description": "Scheda visiva fissa in inglese con aspetto dei personaggi, vestiti e stile grafico."
+         |              "description": "SOLO stile artistico, illuminazione, resa grafica e aspetto base del protagonista (es. 'Pixar 3D animation style, warm cinematic lighting, young boy with curly brown hair and red hoodie'). VIETATO inserire elementi della trama o personaggi secondari."
          |            },
          |            "scenes": {
          |              "type": "array",
@@ -66,7 +68,7 @@ final class GroqStoryboardPlannerCapability(
          |                  "scene_number": { "type": "integer", "description": "Numero progressivo della scena da 1 a N." },
          |                  "shot_type": { "type": "string", "description": "Inquadratura (es. EstablishingWide, DynamicMedium, DramaticCloseUp, FinalPanorama)." },
          |                  "narration": { "type": "string", "description": "Frase narrativa in italiano per questa scena." },
-         |                  "visual_prompt": { "type": "string", "description": "Prompt visivo in inglese per FLUX.1 con stile, personaggi coerenti e azione della scena." }
+         |                  "visual_prompt": { "type": "string", "description": "Prompt visivo in inglese per FLUX.1: descrivi SOLO oggetti, personaggi e ambientazione visibili in questa specifica scena, senza mai nominare elementi delle scene successive o precedenti." }
          |                },
          |                "required": ["scene_number", "shot_type", "narration", "visual_prompt"]
          |              }
