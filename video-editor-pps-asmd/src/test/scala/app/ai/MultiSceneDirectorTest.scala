@@ -9,6 +9,7 @@ import core.model.*
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
@@ -189,3 +190,58 @@ final class MultiSceneDirectorTest extends AnyFunSuite:
         assert(Math.abs(videoClip.duration - 6.5) < 0.001)
         assert(audioClip.duration == 6.2)
         assert(videoClip.startTime == audioClip.startTime)
+
+  test("AIDirectorService: narrazione vuota non invoca AudioGeneratorCapability e non crea AudioClip"):
+    val audioCallCount = new AtomicInteger(0)
+
+    given StoryboardPlannerCapability with
+      override def createStoryboard(story: String)(using Label[AIDirectorError]): StoryboardPlan =
+        StoryboardPlan(
+          styleBible = "Silent film style",
+          scenes = List(
+            SceneDirective(1, "Wide", "   ", "Empty street at night", 4.0)
+          )
+        )
+
+    given ImageGeneratorCapability with
+      override def generateImage(prompt: String)(using Label[AIGenerationError]): GeneratedImage =
+        GeneratedImage("/tmp/silent.png", 1024, 576, prompt)
+
+    given AudioGeneratorCapability with
+      override def generateSpeech(text: String, voiceIdOpt: Option[String])(using Label[AIGenerationError]): GeneratedAudio =
+        audioCallCount.incrementAndGet()
+        GeneratedAudio("/tmp/should_not_exist.mp3", 2.0, text)
+
+    val result = Await.result(AIDirectorService.generateAndAppendStory("Scena muta", Timeline.default), 5.seconds)
+
+    result match
+      case Left(err) => fail(s"Montaggio fallito inaspettatamente: $err")
+      case Right(directed) =>
+        assert(audioCallCount.get() == 0, "AudioGeneratorCapability non deve essere invocato con narrazione vuota")
+        assert(directed.timeline.videoTracks.head.clips.size == 1)
+        assert(directed.timeline.audioTracks.head.clips.isEmpty)
+
+  test("AIDirectorService: propagazione errori TTS interrompe il workflow senza alterare la timeline"):
+    given StoryboardPlannerCapability with
+      override def createStoryboard(story: String)(using Label[AIDirectorError]): StoryboardPlan =
+        StoryboardPlan(
+          styleBible = "Documentary",
+          scenes = List(
+            SceneDirective(1, "Medium", "Testo narrato valido", "Narrator studio", 5.0)
+          )
+        )
+
+    given ImageGeneratorCapability with
+      override def generateImage(prompt: String)(using Label[AIGenerationError]): GeneratedImage =
+        GeneratedImage("/tmp/doc.png", 1024, 576, prompt)
+
+    given AudioGeneratorCapability with
+      override def generateSpeech(text: String, voiceIdOpt: Option[String])(using Label[AIGenerationError]): GeneratedAudio =
+        break(AIGenerationError("Sintesi vocale fallita: voce non disponibile"))
+
+    val initialTimeline = Timeline.default
+    val result = Await.result(AIDirectorService.generateAndAppendStory("Test errore TTS", initialTimeline), 5.seconds)
+
+    assert(result == Left(AIGenerationError("Sintesi vocale fallita: voce non disponibile")))
+    assert(initialTimeline.videoTracks.head.clips.isEmpty)
+    assert(initialTimeline.audioTracks.head.clips.isEmpty)
