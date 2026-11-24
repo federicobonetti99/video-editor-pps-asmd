@@ -1,7 +1,7 @@
 package app.ai
 
 import app.ai.capabilities.http.HttpIntentParserCapability
-import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
+import app.ai.capabilities.{AudioGeneratorCapability, ImageGeneratorCapability, IntentParserCapability}
 import app.ai.domain.*
 import app.ai.services.{AIActionOutcome, AITimelineService}
 import core.engine.TimelineEngine
@@ -20,6 +20,10 @@ class QuickBarIntegrationTest extends AnyFlatSpec with Matchers:
   given ImageGeneratorCapability with
     override def generateImage(prompt: String)(using boundary.Label[AIGenerationError]): GeneratedImage =
       GeneratedImage(path = "/tmp/stub_image.png", width = 1024, height = 576, prompt = prompt)
+
+  given AudioGeneratorCapability with
+    override def generateSpeech(text: String, voiceIdOpt: Option[String])(using boundary.Label[AIGenerationError]): GeneratedAudio =
+      GeneratedAudio(path = "/tmp/stub_speech.mp3", durationSeconds = 3.0, prompt = text)
 
   private def withRealGroqParser(testCode: IntentParserCapability ?=> Unit): Unit =
     val keyOpt = sys.env.get("GROQ_API_KEY").map(_.trim).filter(_.nonEmpty)

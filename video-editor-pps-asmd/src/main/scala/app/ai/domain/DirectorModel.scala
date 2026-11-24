@@ -19,7 +19,8 @@ final case class StoryboardPlan(
 final case class SceneAsset(
                              directive: SceneDirective,
                              image: GeneratedImage,
-                             audioPathOpt: Option[String] = None
+                             audioPathOpt: Option[String] = None,
+                             audioDurationOpt: Option[Double] = None
                            )
 
 final case class AIDirectorError(reason: String)

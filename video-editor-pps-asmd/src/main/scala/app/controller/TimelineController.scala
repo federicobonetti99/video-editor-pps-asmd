@@ -316,6 +316,7 @@ class TimelineController:
   private def handleAIStory(story: String): Unit =
     given StoryboardPlannerCapability = storyboardPlanner
     given ImageGeneratorCapability = imageGenerator
+    given AudioGeneratorCapability = audioGenerator
 
     val current = state.get()
     val targetTrackId = current.timeline.videoTracks.headOption.map(_.id).getOrElse(1)

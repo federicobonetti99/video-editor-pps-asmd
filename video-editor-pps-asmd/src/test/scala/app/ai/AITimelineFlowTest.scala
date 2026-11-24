@@ -1,7 +1,7 @@
 package app.ai
 
 import app.ai.agents.QuickCommandOrchestrator
-import app.ai.capabilities.{ImageGeneratorCapability, IntentParserCapability}
+import app.ai.capabilities.{AudioGeneratorCapability, ImageGeneratorCapability, IntentParserCapability}
 import app.ai.domain.*
 import app.ai.services.{AIActionOutcome, AITimelineService}
 import core.model.*
@@ -12,6 +12,10 @@ import scala.util.boundary
 import scala.util.boundary.break
 
 class AITimelineFlowTest extends AnyFunSuite with Matchers:
+
+  given AudioGeneratorCapability with
+    override def generateSpeech(text: String, voiceIdOpt: Option[String])(using boundary.Label[AIGenerationError]): GeneratedAudio =
+      GeneratedAudio(path = "/tmp/mock_speech.mp3", durationSeconds = 3.0, prompt = text)
 
   test("GeneratedImage calcola correttamente l'aspect ratio 16:9 e gestisce height = 0") {
     val widescreen = GeneratedImage("/tmp/img.png", width = 1024, height = 576, prompt = "test")

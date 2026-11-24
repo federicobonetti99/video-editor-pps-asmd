@@ -1,7 +1,7 @@
 package app.ai
 
 import app.ai.agents.MultiSceneDirectorWorkflow
-import app.ai.capabilities.{ImageGeneratorCapability, StoryboardPlannerCapability}
+import app.ai.capabilities.{AudioGeneratorCapability, ImageGeneratorCapability, StoryboardPlannerCapability}
 import app.ai.capabilities.http.GroqStoryboardPlannerCapability
 import app.ai.domain.*
 import app.ai.services.AIDirectorService
@@ -17,6 +17,10 @@ import scala.util.boundary
 import scala.util.boundary.{Label, break}
 
 final class MultiSceneDirectorTest extends AnyFunSuite:
+
+  given AudioGeneratorCapability with
+    override def generateSpeech(text: String, voiceIdOpt: Option[String])(using Label[AIGenerationError]): GeneratedAudio =
+      GeneratedAudio(path = "/tmp/mock_narration.mp3", durationSeconds = 2.0, prompt = text)
 
   test("GroqStoryboardPlannerCapability seleziona il modello migliore scartando modelli non-chat"):
     val candidates = List(
@@ -98,6 +102,7 @@ final class MultiSceneDirectorTest extends AnyFunSuite:
         val assets = scope.orderedAssets
         assert(assets.map(_.directive.sceneNumber) == List(1, 2))
         assert(assets.map(_.image.path) == List("/tmp/scene1.png", "/tmp/scene2.png"))
+        assert(assets.forall(_.audioPathOpt.contains("/tmp/mock_narration.mp3")))
         assert(scope.executionTrace.size == 2)
 
   test("MultiSceneDirectorWorkflow propaga AIGenerationError se una scena fallisce"):
@@ -119,7 +124,7 @@ final class MultiSceneDirectorTest extends AnyFunSuite:
     val outcome = Await.result(MultiSceneDirectorWorkflow.produceScenes("Test errore"), 5.seconds)
     assert(outcome == Left(AIGenerationError("Quota Cloudflare esaurita")))
 
-  test("AIDirectorService monta le scene in sequenza contigua dal cursore della Timeline"):
+  test("AIDirectorService monta le scene e l'audio sincronizzato dal cursore della Timeline"):
     given StoryboardPlannerCapability with
       override def createStoryboard(story: String)(using Label[AIDirectorError]): StoryboardPlan =
         StoryboardPlan(
@@ -141,11 +146,46 @@ final class MultiSceneDirectorTest extends AnyFunSuite:
     result match
       case Left(err) => fail(s"Montaggio fallito: $err")
       case Right(directed) =>
-        val clips = directed.timeline.videoTracks.head.clips
-        assert(clips.size == 2)
-        assert(clips(0).sourceUrl == "/tmp/s1.png")
-        assert(clips(0).startTime == 10.0)
-        assert(clips(0).duration == 3.5)
-        assert(clips(1).sourceUrl == "/tmp/s2.png")
-        assert(clips(1).startTime == 13.5)
-        assert(clips(1).duration == 4.5)
+        val videoClips = directed.timeline.videoTracks.head.clips
+        assert(videoClips.size == 2)
+        assert(videoClips(0).sourceUrl.endsWith("s1.png"))
+        assert(videoClips(0).startTime == 10.0)
+        assert(videoClips(0).duration == 3.5)
+        assert(videoClips(1).sourceUrl.endsWith("s2.png"))
+        assert(videoClips(1).startTime == 13.5)
+        assert(videoClips(1).duration == 4.5)
+
+        val audioClips = directed.timeline.audioTracks.head.clips
+        assert(audioClips.size == 2)
+        assert(audioClips(0).sourceUrl.endsWith("mock_narration.mp3"))
+        assert(audioClips(0).startTime == 10.0)
+        assert(audioClips(1).startTime == 13.5)
+
+  test("AIDirectorService allunga la scena video se la voce narrante supera la durata base"):
+    given StoryboardPlannerCapability with
+      override def createStoryboard(story: String)(using Label[AIDirectorError]): StoryboardPlan =
+        StoryboardPlan(
+          styleBible = "Sci-fi",
+          scenes = List(
+            SceneDirective(1, "Wide", "Una frase molto lunga di narrazione", "Spaceship orbit", 4.0)
+          )
+        )
+
+    given ImageGeneratorCapability with
+      override def generateImage(prompt: String)(using Label[AIGenerationError]): GeneratedImage =
+        GeneratedImage("/tmp/ship.png", 1024, 576, prompt)
+
+    given AudioGeneratorCapability with
+      override def generateSpeech(text: String, voiceIdOpt: Option[String])(using Label[AIGenerationError]): GeneratedAudio =
+        GeneratedAudio("/tmp/long_voice.mp3", durationSeconds = 6.2, prompt = text)
+
+    val result = Await.result(AIDirectorService.generateAndAppendStory("Sci-fi test", Timeline.default), 5.seconds)
+
+    result match
+      case Left(err) => fail(s"Montaggio fallito: $err")
+      case Right(directed) =>
+        val videoClip = directed.timeline.videoTracks.head.clips.head
+        val audioClip = directed.timeline.audioTracks.head.clips.head
+        assert(Math.abs(videoClip.duration - 6.5) < 0.001)
+        assert(audioClip.duration == 6.2)
+        assert(videoClip.startTime == audioClip.startTime)

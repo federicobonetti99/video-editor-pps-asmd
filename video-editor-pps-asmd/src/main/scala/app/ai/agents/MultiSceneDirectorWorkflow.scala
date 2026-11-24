@@ -1,6 +1,6 @@
 package app.ai.agents
 
-import app.ai.capabilities.{ImageGeneratorCapability, StoryboardPlannerCapability}
+import app.ai.capabilities.{AudioGeneratorCapability, ImageGeneratorCapability, StoryboardPlannerCapability}
 import app.ai.domain.*
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -11,6 +11,7 @@ object MultiSceneDirectorWorkflow:
   def produceScenes(story: String)(using
                                    planner: StoryboardPlannerCapability,
                                    imageGenerator: ImageGeneratorCapability,
+                                   audioGenerator: AudioGeneratorCapability,
                                    ec: ExecutionContext
   ): Future[Either[AIDirectorError | AIGenerationError, AgenticScope]] =
     val scope = new AgenticScope(story)
@@ -39,7 +40,18 @@ object MultiSceneDirectorWorkflow:
 
               imgOutcome match
                 case err: AIGenerationError => Left(err)
-                case img: GeneratedImage    => Right(SceneAsset(directive, img))
+                case img: GeneratedImage =>
+                  val cleanNarration = directive.narration.trim
+                  if cleanNarration.isEmpty then
+                    Right(SceneAsset(directive, img, None, None))
+                  else
+                    val audioOutcome = boundary[AIGenerationError | GeneratedAudio]:
+                      audioGenerator.generateSpeech(cleanNarration, None)
+
+                    audioOutcome match
+                      case err: AIGenerationError => Left(err)
+                      case audio: GeneratedAudio =>
+                        Right(SceneAsset(directive, img, Some(audio.path), Some(audio.durationSeconds)))
             }
           }
 
