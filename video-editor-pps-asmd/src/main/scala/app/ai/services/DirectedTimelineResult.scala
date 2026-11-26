@@ -42,16 +42,17 @@ object AIDirectorService:
     val videoClipsBuf = scala.collection.mutable.ListBuffer.empty[VisualClip]
     val audioClipsBuf = scala.collection.mutable.ListBuffer.empty[AudioClip]
 
-    assets.foreach { asset =>
+    assets.zipWithIndex.foreach { case (asset, idx) =>
       val audioDur = asset.audioDurationOpt.getOrElse(0.0)
       val sceneDuration = Math.max(asset.directive.durationSeconds, audioDur + 0.3)
 
       val imgUrl = toFileUri(asset.image.path)
+      val resolvedEffect = resolveCameraEffect(asset.directive, idx)
       val vClip = ImageClip.create(
         sourceUrl = imgUrl,
         startTime = cursor,
         duration = sceneDuration,
-        effect = asset.directive.effect
+        effect = resolvedEffect
       )
       videoClipsBuf += vClip
 
@@ -95,6 +96,19 @@ object AIDirectorService:
       }
       baseTimeline.copy(audioTracks = updatedAudioTracks)
 
+  private def resolveCameraEffect(directive: SceneDirective, sceneIndex: Int): VideoEffect =
+    if directive.effect != VideoEffect.None then directive.effect
+    else if sceneIndex == 0 then VideoEffect.FadeIn(fadeDuration = 1.0)
+    else
+      directive.shotType.trim.toLowerCase match
+        case s if s.contains("wide") || s.contains("panoramic") =>
+          VideoEffect.ZoomIn(targetScale = 1.12)
+        case s if s.contains("action") || s.contains("dynamic") || s.contains("medium") =>
+          VideoEffect.ZoomIn(targetScale = 1.16)
+        case s if s.contains("close") || s.contains("portrait") =>
+          VideoEffect.ZoomIn(targetScale = 1.07)
+        case _ =>
+          VideoEffect.ZoomIn(targetScale = 1.10)
   private def toFileUri(rawPath: String): String =
     if rawPath.startsWith("file:") then rawPath
     else Paths.get(rawPath).toAbsolutePath.toUri.toString
