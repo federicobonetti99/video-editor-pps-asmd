@@ -93,7 +93,7 @@ class TimelineController:
 
             val hasDynamicEffect = currVideo.exists { c =>
               c.effect match
-                case VideoEffect.ZoomIn(_) | VideoEffect.Shake(_, _) | VideoEffect.FadeIn(_) => true
+                case VideoEffect.ZoomIn(_) | VideoEffect.Shake(_, _) | VideoEffect.FadeIn(_) | VideoEffect.Pan(_, _) => true
                 case _ => false
             }
 

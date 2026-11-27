@@ -39,6 +39,20 @@ object ExportCommandBuilder:
         val durationInFrames = Math.max(1, (safeDuration * fps).toInt)
         val zExpr = s"1.0+(${fmt(target)}-1.0)*(on/$durationInFrames)"
         Some(s"zoompan=z=$zExpr:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=1:s=${width}x${height}:fps=$fps")
+      case VideoEffect.Pan(direction, zoomScale) =>
+        val z = fmt(Math.max(1.05, zoomScale))
+        val durationInFrames = Math.max(1, (safeDuration * fps).toInt)
+        val pExpr = s"min(1\\,on/$durationInFrames)"
+        val (xExpr, yExpr) = direction match
+          case PanDirection.LeftToRight =>
+            (s"'(iw-iw/$z)*(1-$pExpr)'", "'ih/2-(ih/zoom/2)'")
+          case PanDirection.RightToLeft =>
+            (s"'(iw-iw/$z)*$pExpr'", "'ih/2-(ih/zoom/2)'")
+          case PanDirection.BottomToTop =>
+            ("'iw/2-(iw/zoom/2)'", s"'(ih-ih/$z)*$pExpr'")
+          case PanDirection.TopToBottom =>
+            ("'iw/2-(iw/zoom/2)'", s"'(ih-ih/$z)*(1-$pExpr)'")
+        Some(s"scale=iw*2:ih*2,zoompan=z=$z:x=$xExpr:y=$yExpr:d=1:s=${width}x${height}:fps=$fps")
       case VideoEffect.Shake(intensity, frequency) =>
         val offsetInt = Math.max(2, (intensity.toInt * 2) / 2)
         val wx = fmt(2 * Math.PI * frequency, 4)

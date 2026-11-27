@@ -1,6 +1,6 @@
 package core.engine
 
-import core.model.VideoEffect
+import core.model.{PanDirection, VideoEffect}
 
 case class EffectTransform(
                             scale: Double = 1.0,
@@ -35,12 +35,24 @@ object EffectCalculator:
       val progress = if eff.fadeDuration > 0.0 then Math.max(0.0, Math.min(1.0, relativeTime / eff.fadeDuration)) else 1.0
       EffectTransform(opacity = progress)
 
+  given EffectCalculator[VideoEffect.Pan] with
+    def compute(eff: VideoEffect.Pan, relativeTime: Double, clipDuration: Double): EffectTransform =
+      val progress = if clipDuration > 0.0 then Math.max(0.0, Math.min(1.0, relativeTime / clipDuration)) else 0.0
+      val maxOffset = 35.0
+      val (dx, dy) = eff.direction match
+        case PanDirection.LeftToRight => (-maxOffset + 2.0 * maxOffset * progress, 0.0)
+        case PanDirection.RightToLeft => ( maxOffset - 2.0 * maxOffset * progress, 0.0)
+        case PanDirection.BottomToTop => (0.0,  maxOffset - 2.0 * maxOffset * progress)
+        case PanDirection.TopToBottom => (0.0, -maxOffset + 2.0 * maxOffset * progress)
+      EffectTransform(scale = eff.zoomScale, translateX = dx, translateY = dy)
+
   given EffectCalculator[VideoEffect] with
     def compute(effect: VideoEffect, relativeTime: Double, clipDuration: Double): EffectTransform =
       effect match
         case z: VideoEffect.ZoomIn => summon[EffectCalculator[VideoEffect.ZoomIn]].compute(z, relativeTime, clipDuration)
         case s: VideoEffect.Shake  => summon[EffectCalculator[VideoEffect.Shake]].compute(s, relativeTime, clipDuration)
         case f: VideoEffect.FadeIn => summon[EffectCalculator[VideoEffect.FadeIn]].compute(f, relativeTime, clipDuration)
+        case p: VideoEffect.Pan    => summon[EffectCalculator[VideoEffect.Pan]].compute(p, relativeTime, clipDuration)
         case _                     => EffectTransform()
 
   def computeTransform(

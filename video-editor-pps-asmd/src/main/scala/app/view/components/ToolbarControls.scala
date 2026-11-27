@@ -4,7 +4,7 @@ import scalafx.Includes.*
 import scalafx.geometry.Pos
 import scalafx.scene.control.{Button, ComboBox, Label}
 import scalafx.scene.layout.HBox
-import core.model.VideoEffect
+import core.model.{PanDirection, VideoEffect}
 
 class ToolbarControls(
                        val onImport: () => Unit = () => (),
@@ -75,7 +75,19 @@ class ToolbarControls(
     managed = false
 
   private val effectComboBox = new ComboBox[String](
-    Seq("None", "Grayscale", "Sepia", "Invert", "ZoomIn", "FadeIn", "Shake")
+    Seq(
+      "None",
+      "Grayscale",
+      "Sepia",
+      "Invert",
+      "ZoomIn",
+      "FadeIn",
+      "Shake",
+      "PanRight",
+      "PanLeft",
+      "PanUp",
+      "PanDown"
+    )
   ):
     value = "None"
     visible = false
@@ -88,6 +100,10 @@ class ToolbarControls(
         case "ZoomIn"    => VideoEffect.ZoomIn(2.0)
         case "FadeIn"    => VideoEffect.FadeIn(2.0)
         case "Shake"     => VideoEffect.Shake(10.0, 5.0)
+        case "PanRight"  => VideoEffect.Pan(PanDirection.LeftToRight)
+        case "PanLeft"   => VideoEffect.Pan(PanDirection.RightToLeft)
+        case "PanUp"     => VideoEffect.Pan(PanDirection.BottomToTop)
+        case "PanDown"   => VideoEffect.Pan(PanDirection.TopToBottom)
         case _           => VideoEffect.None
       onEffectSelected(selectedEffect)
 
@@ -122,11 +138,16 @@ class ToolbarControls(
 
   def setSelectedEffect(effect: VideoEffect): Unit =
     val stringVal = effect match
-      case VideoEffect.None        => "None"
-      case VideoEffect.Grayscale   => "Grayscale"
-      case VideoEffect.Sepia       => "Sepia"
-      case VideoEffect.Invert      => "Invert"
-      case VideoEffect.ZoomIn(_)   => "ZoomIn"
-      case VideoEffect.FadeIn(_)   => "FadeIn"
-      case VideoEffect.Shake(_, _) => "Shake"
+      case VideoEffect.None                              => "None"
+      case VideoEffect.Grayscale                         => "Grayscale"
+      case VideoEffect.Sepia                             => "Sepia"
+      case VideoEffect.Invert                            => "Invert"
+      case VideoEffect.ZoomIn(_)                         => "ZoomIn"
+      case VideoEffect.FadeIn(_)                         => "FadeIn"
+      case VideoEffect.Shake(_, _)                       => "Shake"
+      case VideoEffect.Pan(PanDirection.LeftToRight, _)  => "PanRight"
+      case VideoEffect.Pan(PanDirection.RightToLeft, _)  => "PanLeft"
+      case VideoEffect.Pan(PanDirection.BottomToTop, _)  => "PanUp"
+      case VideoEffect.Pan(PanDirection.TopToBottom, _)  => "PanDown"
+      case _                                             => "None"
     effectComboBox.value = stringVal

@@ -1,5 +1,8 @@
 package core.model
 
+enum PanDirection:
+  case LeftToRight, RightToLeft, BottomToTop, TopToBottom
+  
 enum VideoEffect:
   case None
   case Grayscale
@@ -9,3 +12,4 @@ enum VideoEffect:
   case ZoomIn(targetScale: Double = 1.3)
   case Shake(intensity: Double = 8.0, freq: Double = 12.0)
   case FadeIn(fadeDuration: Double = 1.0)
+  case Pan(direction: PanDirection, zoomScale: Double = 1.15)

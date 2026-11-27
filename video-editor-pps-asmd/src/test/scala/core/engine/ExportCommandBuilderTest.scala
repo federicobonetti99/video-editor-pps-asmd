@@ -80,7 +80,9 @@ class ExportCommandBuilderTest extends AnyFunSuite:
       VideoEffect.FadeIn(1.5),
       VideoEffect.Grayscale,
       VideoEffect.ZoomIn(1.5),
-      VideoEffect.Shake(10.0, 2.0)
+      VideoEffect.Shake(10.0, 2.0),
+      VideoEffect.Pan(PanDirection.LeftToRight, 1.15),
+      VideoEffect.Pan(PanDirection.BottomToTop, 1.15)
     )
 
     effects.foreach { effect =>
@@ -140,11 +142,11 @@ class ExportCommandBuilderTest extends AnyFunSuite:
       effect = VideoEffect.Shake(intensity = 10.0, freq = 2.0)
     )
     val timeline = Timeline(videoTracks = List(VideoTrack(id = 1, clips = List(imageClip))), audioTracks = Nil)
-  
+
     val command = ExportCommandBuilder.buildCommand(timeline, defaultSettings)
     val filterIndex = command.arguments.indexOf("-filter_complex")
     assert(filterIndex != -1)
-  
+
     val filterString = command.arguments(filterIndex + 1)
 
     assert(filterString.contains("loop=-1:1:0"), s"Filter string missing image loop: $filterString")
@@ -208,4 +210,32 @@ class ExportCommandBuilderTest extends AnyFunSuite:
       !filterString.contains(",,"),
       s"Stringa filtro malformata con virgole doppie: $filterString"
     )
+  }
+
+  test("ExportCommandBuilder generates upscaled zoompan filter with aligned axis for Pan effect") {
+    val panDirections = List(
+      PanDirection.LeftToRight -> "x='(iw-iw/1.150)*(1-min(1\\,on/",
+      PanDirection.RightToLeft -> "x='(iw-iw/1.150)*min(1\\,on/",
+      PanDirection.BottomToTop -> "y='(ih-ih/1.150)*min(1\\,on/",
+      PanDirection.TopToBottom -> "y='(ih-ih/1.150)*(1-min(1\\,on/"
+    )
+
+    panDirections.foreach { case (dir, expectedAxisExpr) =>
+      val panEffect = VideoEffect.Pan(dir, zoomScale = 1.15)
+      val command = ExportCommandBuilder.buildCommand(createSingleClipTimeline(panEffect), defaultSettings)
+
+      val filterIndex = command.arguments.indexOf("-filter_complex")
+      assert(filterIndex != -1)
+
+      val filterString = command.arguments(filterIndex + 1)
+      assert(
+        filterString.contains("scale=iw*2:ih*2,zoompan=z=1.150"),
+        s"Missing sub-pixel upscaling zoompan for $dir: $filterString"
+      )
+      assert(
+        filterString.contains(expectedAxisExpr),
+        s"Axis expression mismatch for $dir: $filterString"
+      )
+      assert(!filterString.contains(",,"), s"Malformed double comma in filter for $dir: $filterString")
+    }
   }
